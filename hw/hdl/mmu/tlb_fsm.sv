@@ -45,9 +45,13 @@ module tlb_fsm #(
 	input logic							aclk,    
 	input logic 						aresetn,
 
+    // TLBs Page Size
+    input wire [4:0]                    pg_bits_a,
+    input wire [4:0]                    pg_bits_b,
+
 	// TLBs
-	tlbIntf.m 							lTlb,
-	tlbIntf.m							sTlb,
+	tlbIntf.m 							aTlb,
+	tlbIntf.m							bTlb,
 
 	// DMA
 `ifdef EN_STRM
@@ -91,12 +95,12 @@ localparam integer PHY_L_BITS = PADDR_BITS - PG_L_BITS;
 localparam integer PHY_S_BITS = PADDR_BITS - PG_S_BITS;
 localparam integer TAG_L_BITS = VADDR_BITS - HASH_L_BITS - PG_L_BITS;
 localparam integer TAG_S_BITS = VADDR_BITS - HASH_S_BITS - PG_S_BITS;
-localparam integer PHY_L_OFFS      = TAG_L_BITS + PID_BITS + STRM_BITS + 1;
-localparam integer PHY_S_OFFS      = TAG_S_BITS + PID_BITS + STRM_BITS + 1;
-localparam integer HPID_L_OFFS     = TAG_L_BITS + PID_BITS + STRM_BITS + 1 + PHY_L_BITS;
-localparam integer HPID_S_OFFS     = TAG_S_BITS + PID_BITS + STRM_BITS + 1 + PHY_S_BITS;
-localparam integer TLB_L_DATA_BITS = TAG_L_BITS + PID_BITS + STRM_BITS + 1 + PHY_L_BITS + HPID_BITS;
-localparam integer TLB_S_DATA_BITS = TAG_S_BITS + PID_BITS + STRM_BITS + 1 + PHY_S_BITS + HPID_BITS;
+localparam integer PHY_L_OFFS      = HPID_BITS;
+localparam integer PHY_S_OFFS      = HPID_BITS;
+localparam integer HPID_L_OFFS     = 0;
+localparam integer HPID_S_OFFS     = 0;
+localparam integer TLB_L_DATA_BITS = TLB_DATA_BITS;
+localparam integer TLB_S_DATA_BITS = TLB_DATA_BITS;
 localparam integer N_OUTSTANDING_BITS = clog2s(N_TLB_ACTV);
 localparam integer N_CARD_AXI_BITS = clog2s(N_CARD_AXI);
 
@@ -107,7 +111,7 @@ localparam integer RTRN_MISS = 2;
 // -- FSM ---------------------------------------------------------------------------------------------------
 typedef enum logic[4:0] {ST_IDLE, ST_LOCKED,
                          ST_MUTEX, ST_WAIT_1, ST_WAIT_2, ST_CHECK,
-					     ST_HIT_LARGE, ST_HIT_SMALL, ST_CALC_LARGE, ST_CALC_SMALL, // timing extra states
+					     ST_HIT_LARGE_A, ST_HIT_SMALL_A, ST_HIT_LARGE_B, ST_HIT_SMALL_B, ST_CALC_LARGE, ST_CALC_SMALL, // timing extra states
 `ifdef EN_STRM
                          ST_INVLDT_HOST, ST_INVLDT_LUP_HOST, ST_INVLDT_WAIT_HOST, ST_INVLDT_CMP_HOST,
                          ST_HOST_SEND,
@@ -501,7 +505,9 @@ always_comb begin: NSL
 		// Check hits
 		ST_CHECK: begin
             if(hit) begin
-                state_N = lTlb.hit ? ST_HIT_LARGE : ST_HIT_SMALL;    
+                state_N = aTlb.hit ? 
+                    (pg_bits_a == 12 ? ST_HIT_SMALL_A : ST_HIT_LARGE_A) : 
+                    (pg_bits_b == 12 ? ST_HIT_SMALL_B : ST_HIT_LARGE_B);    
             end
             else begin
                 state_N = ST_MISS_CACHE;
@@ -509,9 +515,13 @@ always_comb begin: NSL
         end
 
         // Page parsing
-		ST_HIT_LARGE:
+		ST_HIT_LARGE_A:
 			state_N = ST_CALC_LARGE;
-		ST_HIT_SMALL:
+        ST_HIT_LARGE_B:
+			state_N = ST_CALC_LARGE;
+		ST_HIT_SMALL_A:
+			state_N = ST_CALC_SMALL;
+        ST_HIT_SMALL_B:
 			state_N = ST_CALC_SMALL;
 		
 		// Calc.
@@ -611,7 +621,7 @@ always_comb begin: DP
 	// TLB
     data_l_N = data_l_C;
 	data_s_N = data_s_C;
-    hpid = lTlb.hit ? data_l_C[HPID_L_OFFS+:HPID_BITS] : data_s_C[HPID_S_OFFS+:HPID_BITS];
+    hpid = aTlb.hit ? data_l_C[HPID_L_OFFS+:HPID_BITS] : data_s_C[HPID_S_OFFS+:HPID_BITS];
     
 	// Out
 	plen_N = plen_C;
@@ -660,19 +670,19 @@ always_comb begin: DP
     m_invldt.data = invldt_C.hpid;
 
 	// TLB
-	lTlb.addr = vaddr_C;
-	lTlb.wr = RDWR;
-	lTlb.pid = pid_C;
-    lTlb.strm = strm_C;
-	lTlb.valid = val_C;
+	aTlb.addr = vaddr_C;
+	aTlb.wr = RDWR;
+	aTlb.pid = pid_C;
+    aTlb.strm = strm_C;
+	aTlb.valid = val_C;
 
-	sTlb.addr = vaddr_C;
-	sTlb.wr = RDWR;
-	sTlb.pid = pid_C;
-    sTlb.strm = strm_C;
-	sTlb.valid = val_C;
+	bTlb.addr = vaddr_C;
+	bTlb.wr = RDWR;
+	bTlb.pid = pid_C;
+    bTlb.strm = strm_C;
+	bTlb.valid = val_C;
 
-    hit = lTlb.hit | sTlb.hit;
+    hit = aTlb.hit | bTlb.hit;
 
 `ifdef EN_STRM
     head_host_N = head_host_C;
@@ -920,12 +930,18 @@ always_comb begin: DP
             end
         end
 
-		ST_HIT_LARGE: begin
-			data_l_N = lTlb.data;
+		ST_HIT_LARGE_A: begin
+			data_l_N = aTlb.data;
+		end
+        ST_HIT_LARGE_B: begin
+			data_l_N = bTlb.data;
 		end
 
-		ST_HIT_SMALL: begin
-            data_s_N = sTlb.data;
+		ST_HIT_SMALL_A: begin
+            data_s_N = aTlb.data;
+		end
+        ST_HIT_SMALL_B: begin
+            data_s_N = bTlb.data;
 		end
 
 		ST_CALC_LARGE: begin

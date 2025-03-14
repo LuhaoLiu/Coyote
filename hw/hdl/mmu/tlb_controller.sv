@@ -35,12 +35,10 @@ import lynxTypes::*;
  * Pulls the VA -> PA mappings from the host memory.
  *
  *  @param TLB_ORDER    Size of the TLBs
- *  @param PG_BITS      Number of page size bits
  *  @param N_ASSOC      Set associativity
  */
 module tlb_controller #(
   parameter integer TLB_ORDER = 10,
-  parameter integer PG_BITS = 12,
   parameter integer N_ASSOC = 4,
   parameter integer DBG_L = 0,
   parameter integer DBG_S = 0,
@@ -49,9 +47,23 @@ module tlb_controller #(
   input  logic              aclk,
   input  logic              aresetn,
 
+  input  wire  [4:0]        pg_bits, // support 4K -> 12; 2M -> 21; 1G -> 30
   AXI4S.s                   s_axis,
   tlbIntf.s                 TLB
 );
+
+// -- Brief ---------------------------------------------------------
+// ------------------------------------------------------------------
+// ------------------- TLB Entry (104 bits) -------------------------
+//         | VALID | STRM | PID |  TAG  |  PHY  |  HPID  |
+//         |   1   |   2  |  6  |   31  |   32  |   32   | 
+// ------------------------------------------------------------------
+// Assert: 
+//  1. PHY_BITS = PADDR_BITS - pg_bits <= 32
+//  2. TAG_BITS = VADDR_BITS - TLB_ORDER - pg_bits <= 31
+//  3. TOTAL <= TLB_DATA_BITS = 104
+// ------------------------------------------------------------------
+
 
 // -- Decl ----------------------------------------------------------
 // ------------------------------------------------------------------
@@ -59,9 +71,9 @@ module tlb_controller #(
 // Constants
 localparam integer N_ASSOC_BITS = $clog2(N_ASSOC);
 
-localparam integer PHY_BITS = PADDR_BITS - PG_BITS;
-localparam integer TAG_BITS = VADDR_BITS - TLB_ORDER - PG_BITS;
-localparam integer TLB_VAL_BIT_OFFS = TAG_BITS + PID_BITS + STRM_BITS;
+localparam integer PHY_BITS = 32; // >= PADDR_BITS - pg_bits
+localparam integer TAG_BITS = 31; // >= VADDR_BITS - TLB_ORDER - pg_bits
+localparam integer TLB_VAL_BIT_OFFS = HPID_BITS + PHY_BITS + TAG_BITS + PID_BITS + STRM_BITS; // = 103
 
 localparam integer TLB_SIZE = 2**TLB_ORDER;
 localparam integer TLB_IDX_BITS = $clog2(N_ASSOC);
@@ -111,6 +123,18 @@ logic [1:0][STRM_BITS-1:0] strm_ext;
 logic [1:0] wr_ext;
 logic [1:0] val_ext;
 
+logic [PHY_BITS-1:0] data_C_phy;
+logic [HPID_BITS-1:0] data_C_hpid;
+logic [TLB_ORDER-1:0] data_C_idx;
+logic [TAG_BITS-1:0] data_C_tag;
+logic [PID_BITS-1:0] data_C_pid;
+logic [STRM_BITS-1:0] data_C_strm;
+logic data_C_val;
+
+logic [VADDR_BITS+32-1:0] tlb_addr_extended;
+logic [TLB_ORDER-1:0] tlb_addr_idx;
+logic [TAG_BITS-1:0] tlb_addr_tag;
+
 // -- Def -----------------------------------------------------------
 // ------------------------------------------------------------------
 
@@ -140,7 +164,7 @@ for (genvar i = 0; i < N_ASSOC; i++) begin
       .a_we      (tlb_wr_en[i]),
       .a_addr    (tlb_addr[i]),
       .b_en      (1'b1),
-      .b_addr    (TLB.addr[PG_BITS+:TLB_ORDER]),
+      .b_addr    (tlb_addr_idx),
       .a_data_in (tlb_data_upd_in[i]),
       .a_data_out(tlb_data_upd_out[i]),
       .b_data_out(tlb_data_lup[i])
@@ -234,10 +258,13 @@ always_comb begin
 
     // TLB
     for(int i = 0; i < N_ASSOC; i++) begin
-        tlb_data_upd_in[i][0+:TAG_BITS+PID_BITS+STRM_BITS+1] = data_C[64+TLB_ORDER+:TAG_BITS+PID_BITS+STRM_BITS+1];
-        tlb_data_upd_in[i][0+TAG_BITS+PID_BITS+STRM_BITS+1+:PHY_BITS] = data_C[0+:PHY_BITS];
-        tlb_data_upd_in[i][TAG_BITS+PID_BITS+STRM_BITS+1+PHY_BITS+:HPID_BITS] = data_C[32+:HPID_BITS];
-        tlb_addr[i] = data_C[64+:TLB_ORDER];
+        tlb_data_upd_in[i][0+:HPID_BITS] = data_C_hpid;
+        tlb_data_upd_in[i][HPID_BITS+:PHY_BITS] = data_C_phy;
+        tlb_data_upd_in[i][HPID_BITS+PHY_BITS+:TAG_BITS] = data_C_tag;
+        tlb_data_upd_in[i][HPID_BITS+PHY_BITS+TAG_BITS+:PID_BITS] = data_C_pid;
+        tlb_data_upd_in[i][HPID_BITS+PHY_BITS+TAG_BITS+PID_BITS+:STRM_BITS] = data_C_strm;
+        tlb_data_upd_in[i][TLB_VAL_BIT_OFFS+:1] = data_C_val;
+        tlb_addr[i] = data_C_idx;
     end
     tlb_wr_en = 0;
 
@@ -245,8 +272,8 @@ always_comb begin
     for(int i = 0; i < N_ASSOC; i++) begin
         ref_r_data_upd_in[i] = 0;
         ref_m_data_upd_in[i] = 0;
-        ref_r_addr[i] = data_C[64+:TLB_ORDER];
-        ref_m_addr[i] = data_C[64+:TLB_ORDER];
+        ref_r_addr[i] = data_C_idx;
+        ref_m_addr[i] = data_C_idx;
         ref_r_wr_en[i] = 0;
         ref_m_wr_en[i] = 0;
     end
@@ -282,7 +309,7 @@ always_comb begin
         end
 
         ST_COMP: begin
-            if(data_C[64+TLB_ORDER+TLB_VAL_BIT_OFFS]) begin
+            if(data_C_val) begin
                 // Insertion
                 if(!filled) begin
                     tlb_wr_en[entry_insert_fe] = ~0;    
@@ -294,8 +321,8 @@ always_comb begin
             else begin
                 // Removal
                 for(int i = 0; i < N_ASSOC; i++) begin
-                    if((tlb_data_upd_out[i][0+:TAG_BITS] == data_C[64+TLB_ORDER+:TAG_BITS]) && // tag
-                       (tlb_data_upd_out[i][TAG_BITS+PID_BITS+STRM_BITS+1+PHY_BITS+:HPID_BITS] == data_C[32+:HPID_BITS]) // host pid
+                    if((tlb_data_upd_out[i][HPID_BITS+PHY_BITS+:TAG_BITS] == data_C_tag) && // tag
+                       (tlb_data_upd_out[i][0+:HPID_BITS] == data_C_hpid) // host pid
                        ) begin
                         tlb_wr_en[i] = ~0;
                         ref_r_wr_en[i] = ~0;
@@ -306,6 +333,53 @@ always_comb begin
         end
 
     endcase
+end
+
+// DP of data_C and tlb_addr selection regaring pg_bits
+always_comb begin
+    data_C_hpid       = data_C[32 +: HPID_BITS];
+    data_C_phy        = 0;
+    data_C_tag        = 0;
+    data_C_pid        = 0;
+    data_C_strm       = 0;
+    data_C_val        = 0;
+    data_C_idx        = data_C[64 +: TLB_ORDER];
+
+    tlb_addr_extended = {32'b0, TLB.addr};
+    tlb_addr_idx      = 0;
+    tlb_addr_tag      = 0;
+
+    if (pg_bits == 12) begin
+        // 4K
+        data_C_phy[0 +: (PADDR_BITS - 12)]             = data_C[0 +: (PADDR_BITS - 12)];
+        data_C_tag[0 +: (VADDR_BITS - TLB_ORDER - 12)] = data_C[64+TLB_ORDER +: (VADDR_BITS - TLB_ORDER - 12)];
+        data_C_pid                                     = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 12) +: PID_BITS];
+        data_C_strm                                    = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 12)+PID_BITS +: STRM_BITS];
+        data_C_val                                     = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 12)+PID_BITS+STRM_BITS +: 1];
+
+        tlb_addr_idx                                   = tlb_addr_extended[12 +: TLB_ORDER];
+        tlb_addr_tag                                   = tlb_addr_extended[12+TLB_ORDER +: TAG_BITS];
+    end else if (pg_bits == 21) begin
+        // 2M
+        data_C_phy[0 +: (PADDR_BITS - 21)]             = data_C[0 +: (PADDR_BITS - 21)];
+        data_C_tag[0 +: (VADDR_BITS - TLB_ORDER - 21)] = data_C[64+TLB_ORDER +: (VADDR_BITS - TLB_ORDER - 21)];
+        data_C_pid                                     = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 21) +: PID_BITS];
+        data_C_strm                                    = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 21)+PID_BITS +: STRM_BITS];
+        data_C_val                                     = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 21)+PID_BITS+STRM_BITS +: 1];
+
+        tlb_addr_idx                                   = tlb_addr_extended[21 +: TLB_ORDER];
+        tlb_addr_tag                                   = tlb_addr_extended[21+TLB_ORDER +: TAG_BITS];
+    end else if (pg_bits == 30) begin
+        // 1G
+        data_C_phy[0 +: (PADDR_BITS - 30)]             = data_C[0 +: (PADDR_BITS - 30)];
+        data_C_tag[0 +: (VADDR_BITS - TLB_ORDER - 30)] = data_C[64+TLB_ORDER +: (VADDR_BITS - TLB_ORDER - 30)];
+        data_C_pid                                     = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 30) +: PID_BITS];
+        data_C_strm                                    = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 30)+PID_BITS +: STRM_BITS];
+        data_C_val                                     = data_C[64+TLB_ORDER+(VADDR_BITS - TLB_ORDER - 30)+PID_BITS+STRM_BITS +: 1];
+
+        tlb_addr_idx                                   = tlb_addr_extended[30 +: TLB_ORDER];
+        tlb_addr_tag                                   = tlb_addr_extended[30+TLB_ORDER +: TAG_BITS];
+    end
 end
 
 // Find first order
@@ -370,8 +444,8 @@ always_ff @( posedge aclk ) begin : TLB_CLR
         end
 
         // External updates
-        addr_ext[0] <= TLB.addr[PG_BITS+:TLB_ORDER];
-        tag_ext[0] <= TLB.addr[PG_BITS+TLB_ORDER+:TAG_BITS];
+        addr_ext[0] <= tlb_addr_idx;
+        tag_ext[0] <= tlb_addr_tag;
         pid_ext[0] <= TLB.pid;
         strm_ext[0] <= TLB.strm;
         wr_ext[0] <= TLB.wr;
@@ -401,11 +475,11 @@ always_comb begin
 	for (int i = 0; i < N_ASSOC; i++) begin
         // tag cmp
         tag_cmp[i] = 
-        (tlb_data_lup[i][0+:TAG_BITS] == tag_ext[1]) && //TLB.addr[PG_BITS+TLB_ORDER+:TAG_BITS]) && // tag hit
-        (tlb_data_lup[i][TAG_BITS+:PID_BITS] == pid_ext[1]) && //TLB.pid) && // pid hit
+        (tlb_data_lup[i][HPID_BITS+PHY_BITS+:TAG_BITS] == tag_ext[1]) && // tag hit
+        (tlb_data_lup[i][HPID_BITS+PHY_BITS+TAG_BITS+:PID_BITS] == pid_ext[1]) && // pid hit
 `ifdef EN_STRM
 `ifdef EN_MEM        
-        (tlb_data_lup[i][TAG_BITS+PID_BITS+:STRM_BITS] == strm_ext[1]) && //TLB.strm) && // strm hit
+        (tlb_data_lup[i][HPID_BITS+PHY_BITS+TAG_BITS+PID_BITS+:STRM_BITS] == strm_ext[1]) && //TLB.strm) && // strm hit
 `endif
 `endif
         tlb_data_lup[i][TLB_VAL_BIT_OFFS];
@@ -435,7 +509,7 @@ end
 //`define DBG_TLB_CONTROLLER
 `ifdef DBG_TLB_CONTROLLER
 
-if(PG_BITS == 12) begin
+if(pg_bits == 12) begin
 if(ID_REG == 0) begin
 ila_tlb_ctrl inst_ila_tlb_ctrl (
     .clk(aclk),

@@ -172,26 +172,26 @@ assign sTlb.valid = mutex[1] ? wr_sTlb.valid : rd_sTlb.valid;
 // TLBs
 tlb_controller #(
     .TLB_ORDER(TLB_L_ORDER),
-    .PG_BITS(PG_L_BITS),
     .N_ASSOC(N_L_ASSOC),
     .DBG_L(1),
     .ID_REG(ID_REG)
 ) inst_lTlb (
     .aclk(aclk),
     .aresetn(aresetn),
+    .pg_bits(PG_L_BITS),
     .s_axis(axis_lTlb),
     .TLB(lTlb)
 );
 
 tlb_controller #(
     .TLB_ORDER(TLB_S_ORDER),
-    .PG_BITS(PG_S_BITS),
     .N_ASSOC(N_S_ASSOC),
     .DBG_S(1),
     .ID_REG(ID_REG)
 ) inst_sTlb (
     .aclk(aclk),
     .aresetn(aresetn),
+    .pg_bits(PG_S_BITS),
     .s_axis(axis_sTlb),
     .TLB(sTlb)
 );
@@ -265,8 +265,8 @@ tlb_fsm #(
 ) inst_fsm_rd (
     .aclk(aclk),
     .aresetn(aresetn),
-    .lTlb(rd_lTlb),
-    .sTlb(rd_sTlb),
+    .aTlb(rd_lTlb),
+    .bTlb(rd_sTlb),
 `ifdef EN_STRM
     .m_host_done(m_rd_host_done),
     .m_HDMA(rd_HDMA_fsm),
@@ -296,8 +296,8 @@ tlb_fsm #(
 ) inst_fsm_wr (
     .aclk(aclk),
     .aresetn(aresetn),
-    .lTlb(wr_lTlb),
-    .sTlb(wr_sTlb),
+    .aTlb(wr_lTlb),
+    .bTlb(wr_sTlb),
 `ifdef EN_STRM
     .m_host_done(m_wr_host_done),
     .m_HDMA(wr_HDMA_fsm),

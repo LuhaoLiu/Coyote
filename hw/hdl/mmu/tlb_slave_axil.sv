@@ -30,9 +30,9 @@
 import lynxTypes::*;
 
 module tlb_slave_axil #(
-  parameter integer TLB_ORDER = 10,
-  parameter integer PG_BITS = 12,
-  parameter integer N_ASSOC = 4
+  // parameter integer TLB_ORDER = 10,
+  // parameter integer PG_BITS = 12,
+  // parameter integer N_ASSOC = 4
 ) (
   input  logic              aclk,
   input  logic              aresetn,
@@ -50,10 +50,10 @@ localparam integer ADDR_LSB = $clog2(AXIL_DATA_BITS/8);
 localparam integer ADDR_MSB = $clog2(N_REGS);
 localparam integer AXIL_ADDR_BITS = ADDR_MSB + ADDR_LSB;
 
-localparam integer HASH_BITS = TLB_ORDER;
-localparam integer PHY_BITS = PADDR_BITS - PG_BITS;
-localparam integer TAG_BITS = VADDR_BITS - TLB_ORDER - PG_BITS;
-localparam integer TLB_VAL_BIT = TAG_BITS + PID_BITS;
+// localparam integer HASH_BITS = TLB_ORDER;
+// localparam integer PHY_BITS = PADDR_BITS - PG_BITS;
+// localparam integer TAG_BITS = VADDR_BITS - TLB_ORDER - PG_BITS;
+// localparam integer TLB_VAL_BIT = TAG_BITS + PID_BITS;
 
 // Internal registers
 logic [AXIL_ADDR_BITS-1:0] axi_awaddr;

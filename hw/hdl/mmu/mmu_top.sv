@@ -45,7 +45,7 @@ module mmu_top #(
 	
 	// AXI tlb control
     AXI4L.s   							s_axi_ctrl_sTlb [N_REGIONS],
-    AXI4L.s   							s_axi_ctrl_lTlb [N_REGIONS],
+    AXI4L.s   							s_axi_ctrl_dTlb [N_REGIONS],
 
 `ifdef EN_AVX
 	// AXI config
@@ -167,7 +167,7 @@ for(genvar i = 0; i < N_REGIONS; i++) begin
         .aclk(aclk),
         .aresetn(aresetn),
         .s_axi_ctrl_sTlb(s_axi_ctrl_sTlb[i]), // 
-        .s_axi_ctrl_lTlb(s_axi_ctrl_lTlb[i]), //
+        .s_axi_ctrl_dTlb(s_axi_ctrl_dTlb[i]), //
         .s_bpss_rd_sq(s_bpss_rd_sq[i]), // 
 		.s_bpss_wr_sq(s_bpss_wr_sq[i]), // 
     `ifdef EN_STRM

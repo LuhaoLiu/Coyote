@@ -789,8 +789,8 @@ module design_dynamic_top #(
 	// Rest of interfaces
 	// ================-----------------------------------------------------------------
     
-    // Control lTLB
-	AXI4L axi_ctrl_lTlb [N_REGIONS] ();
+    // Control dTLB
+	AXI4L axi_ctrl_dTlb [N_REGIONS] ();
 	
 	// Control sTLB
 	AXI4L axi_ctrl_sTlb [N_REGIONS] ();
@@ -921,7 +921,7 @@ module design_dynamic_top #(
         .s_axi_ctrl(axi_ctrl_s0),
         .m_axi_ctrl_cnfg(axi_ctrl_cnfg),
         .m_axi_ctrl_sTlb(axi_ctrl_sTlb),
-        .m_axi_ctrl_lTlb(axi_ctrl_lTlb),
+        .m_axi_ctrl_dTlb(axi_ctrl_dTlb),
         .m_axi_ctrl_user(axi_ctrl_user)
 	);
 	
@@ -937,7 +937,7 @@ module design_dynamic_top #(
 	) inst_mmu_top (
         .aclk(aclk),
         .aresetn(aresetn),
-        .s_axi_ctrl_lTlb(axi_ctrl_lTlb),
+        .s_axi_ctrl_dTlb(axi_ctrl_dTlb),
         .s_axi_ctrl_sTlb(axi_ctrl_sTlb),
 {% if cnfg.en_avx %}
 		.s_axim_ctrl_cnfg(axim_ctrl_s0),

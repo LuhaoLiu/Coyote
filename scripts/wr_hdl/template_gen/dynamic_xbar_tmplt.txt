@@ -21,7 +21,7 @@ module dynamic_crossbar #(
     AXI4L.m                            m_axi_ctrl_sTlb [N_REGIONS],
     
     // AXI4 Lite control out
-    AXI4L.m                            m_axi_ctrl_lTlb [N_REGIONS],
+    AXI4L.m                            m_axi_ctrl_dTlb [N_REGIONS],
     
     // AXI4 Lite control out
     AXI4L.m                            m_axi_ctrl_user [N_REGIONS]
@@ -75,29 +75,29 @@ module dynamic_crossbar #(
         assign axi_xbar_rvalid[i][3]                    = m_axi_ctrl_cnfg[i].rvalid;
         assign axi_xbar_wready[i][3]                    = m_axi_ctrl_cnfg[i].wready;
     
-        // lTlb
-        assign m_axi_ctrl_lTlb[i].araddr                  = axi_xbar_araddr[i][AXI_ADDR_BITS-1:0];
-        assign m_axi_ctrl_lTlb[i].arprot                  = axi_xbar_arprot[i][2:0];
-        assign m_axi_ctrl_lTlb[i].arvalid                 = axi_xbar_arvalid[i][0];
-        assign m_axi_ctrl_lTlb[i].awaddr                  = axi_xbar_awaddr[i][AXI_ADDR_BITS-1:0];
-        assign m_axi_ctrl_lTlb[i].awprot                  = axi_xbar_awprot[i][2:0];
-        assign m_axi_ctrl_lTlb[i].awvalid                 = axi_xbar_awvalid[i][0];
-        assign m_axi_ctrl_lTlb[i].bready                  = axi_xbar_bready[i][0];
-        assign m_axi_ctrl_lTlb[i].rready                  = axi_xbar_rready[i][0];
-        assign m_axi_ctrl_lTlb[i].wdata                   = axi_xbar_wdata[i][AXIL_DATA_BITS-1:0];
-        assign m_axi_ctrl_lTlb[i].wstrb                   = axi_xbar_wstrb[i][(AXIL_DATA_BITS/8)-1:0];
-        assign m_axi_ctrl_lTlb[i].wvalid                  = axi_xbar_wvalid[i][0];
+        // dTlb (discrete TLB)
+        assign m_axi_ctrl_dTlb[i].araddr                  = axi_xbar_araddr[i][AXI_ADDR_BITS-1:0];
+        assign m_axi_ctrl_dTlb[i].arprot                  = axi_xbar_arprot[i][2:0];
+        assign m_axi_ctrl_dTlb[i].arvalid                 = axi_xbar_arvalid[i][0];
+        assign m_axi_ctrl_dTlb[i].awaddr                  = axi_xbar_awaddr[i][AXI_ADDR_BITS-1:0];
+        assign m_axi_ctrl_dTlb[i].awprot                  = axi_xbar_awprot[i][2:0];
+        assign m_axi_ctrl_dTlb[i].awvalid                 = axi_xbar_awvalid[i][0];
+        assign m_axi_ctrl_dTlb[i].bready                  = axi_xbar_bready[i][0];
+        assign m_axi_ctrl_dTlb[i].rready                  = axi_xbar_rready[i][0];
+        assign m_axi_ctrl_dTlb[i].wdata                   = axi_xbar_wdata[i][AXIL_DATA_BITS-1:0];
+        assign m_axi_ctrl_dTlb[i].wstrb                   = axi_xbar_wstrb[i][(AXIL_DATA_BITS/8)-1:0];
+        assign m_axi_ctrl_dTlb[i].wvalid                  = axi_xbar_wvalid[i][0];
         
-        assign axi_xbar_arready[i][0]                   = m_axi_ctrl_lTlb[i].arready;
-        assign axi_xbar_awready[i][0]                   = m_axi_ctrl_lTlb[i].awready;
-        assign axi_xbar_bresp[i][1:0]                   = m_axi_ctrl_lTlb[i].bresp;
-        assign axi_xbar_bvalid[i][0]                    = m_axi_ctrl_lTlb[i].bvalid;
-        assign axi_xbar_rdata[i][AXIL_DATA_BITS-1:0]    = m_axi_ctrl_lTlb[i].rdata;
-        assign axi_xbar_rresp[i][1:0]                   = m_axi_ctrl_lTlb[i].rresp;
-        assign axi_xbar_rvalid[i][0]                    = m_axi_ctrl_lTlb[i].rvalid;
-        assign axi_xbar_wready[i][0]                    = m_axi_ctrl_lTlb[i].wready;
+        assign axi_xbar_arready[i][0]                   = m_axi_ctrl_dTlb[i].arready;
+        assign axi_xbar_awready[i][0]                   = m_axi_ctrl_dTlb[i].awready;
+        assign axi_xbar_bresp[i][1:0]                   = m_axi_ctrl_dTlb[i].bresp;
+        assign axi_xbar_bvalid[i][0]                    = m_axi_ctrl_dTlb[i].bvalid;
+        assign axi_xbar_rdata[i][AXIL_DATA_BITS-1:0]    = m_axi_ctrl_dTlb[i].rdata;
+        assign axi_xbar_rresp[i][1:0]                   = m_axi_ctrl_dTlb[i].rresp;
+        assign axi_xbar_rvalid[i][0]                    = m_axi_ctrl_dTlb[i].rvalid;
+        assign axi_xbar_wready[i][0]                    = m_axi_ctrl_dTlb[i].wready;
     
-        // sTlb
+        // sTlb (stream TLB)
         assign m_axi_ctrl_sTlb[i].araddr                  = axi_xbar_araddr[i][2*AXI_ADDR_BITS-1:AXI_ADDR_BITS];
         assign m_axi_ctrl_sTlb[i].arprot                  = axi_xbar_arprot[i][5:3];
         assign m_axi_ctrl_sTlb[i].arvalid                 = axi_xbar_arvalid[i][1];

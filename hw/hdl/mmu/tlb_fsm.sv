@@ -46,12 +46,12 @@ module tlb_fsm #(
 	input logic 						aresetn,
 
     // TLBs Page Size
-    input wire [4:0]                    pg_bits_a,
-    input wire [4:0]                    pg_bits_b,
+    input wire [4:0]                    pg_bits_d,
+    input wire [4:0]                    pg_bits_s,
 
 	// TLBs
-	tlbIntf.m 							aTlb,
-	tlbIntf.m							bTlb,
+	tlbIntf.m 							dTlb,
+	tlbIntf.m							sTlb,
 
 	// DMA
 `ifdef EN_STRM
@@ -505,9 +505,9 @@ always_comb begin: NSL
 		// Check hits
 		ST_CHECK: begin
             if(hit) begin
-                state_N = aTlb.hit ? 
-                    (pg_bits_a == 12 ? ST_HIT_SMALL_A : ST_HIT_LARGE_A) : 
-                    (pg_bits_b == 12 ? ST_HIT_SMALL_B : ST_HIT_LARGE_B);    
+                state_N = dTlb.hit ? 
+                    (pg_bits_d == 12 ? ST_HIT_SMALL_A : ST_HIT_LARGE_A) : 
+                    (pg_bits_s == 12 ? ST_HIT_SMALL_B : ST_HIT_LARGE_B);    
             end
             else begin
                 state_N = ST_MISS_CACHE;
@@ -621,7 +621,7 @@ always_comb begin: DP
 	// TLB
     data_l_N = data_l_C;
 	data_s_N = data_s_C;
-    hpid = aTlb.hit ? data_l_C[HPID_L_OFFS+:HPID_BITS] : data_s_C[HPID_S_OFFS+:HPID_BITS];
+    hpid = dTlb.hit ? data_l_C[HPID_L_OFFS+:HPID_BITS] : data_s_C[HPID_S_OFFS+:HPID_BITS];
     
 	// Out
 	plen_N = plen_C;
@@ -670,19 +670,19 @@ always_comb begin: DP
     m_invldt.data = invldt_C.hpid;
 
 	// TLB
-	aTlb.addr = vaddr_C;
-	aTlb.wr = RDWR;
-	aTlb.pid = pid_C;
-    aTlb.strm = strm_C;
-	aTlb.valid = val_C;
+	dTlb.addr = vaddr_C;
+	dTlb.wr = RDWR;
+	dTlb.pid = pid_C;
+    dTlb.strm = strm_C;
+	dTlb.valid = val_C;
 
-	bTlb.addr = vaddr_C;
-	bTlb.wr = RDWR;
-	bTlb.pid = pid_C;
-    bTlb.strm = strm_C;
-	bTlb.valid = val_C;
+	sTlb.addr = vaddr_C;
+	sTlb.wr = RDWR;
+	sTlb.pid = pid_C;
+    sTlb.strm = strm_C;
+	sTlb.valid = val_C;
 
-    hit = aTlb.hit | bTlb.hit;
+    hit = dTlb.hit | sTlb.hit;
 
 `ifdef EN_STRM
     head_host_N = head_host_C;
@@ -931,17 +931,17 @@ always_comb begin: DP
         end
 
 		ST_HIT_LARGE_A: begin
-			data_l_N = aTlb.data;
+			data_l_N = dTlb.data;
 		end
         ST_HIT_LARGE_B: begin
-			data_l_N = bTlb.data;
+			data_l_N = sTlb.data;
 		end
 
 		ST_HIT_SMALL_A: begin
-            data_s_N = aTlb.data;
+            data_s_N = dTlb.data;
 		end
         ST_HIT_SMALL_B: begin
-            data_s_N = bTlb.data;
+            data_s_N = sTlb.data;
 		end
 
 		ST_CALC_LARGE: begin

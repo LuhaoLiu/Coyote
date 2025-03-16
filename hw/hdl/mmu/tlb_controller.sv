@@ -39,6 +39,7 @@ import lynxTypes::*;
  */
 module tlb_controller #(
   parameter integer TLB_ORDER = 10,
+  parameter integer DEF_PG_BITS = 12,
   parameter integer N_ASSOC = 4,
   parameter integer DBG_L = 0,
   parameter integer DBG_S = 0,
@@ -47,7 +48,7 @@ module tlb_controller #(
   input  logic              aclk,
   input  logic              aresetn,
 
-  input  wire  [4:0]        pg_bits, // support 4K -> 12; 2M -> 21; 1G -> 30
+  output logic [4:0]        pg_bits, // support 4K -> 12; 2M -> 21; 1G -> 30
   AXI4S.s                   s_axis,
   tlbIntf.s                 TLB
 );
@@ -79,8 +80,10 @@ localparam integer TLB_SIZE = 2**TLB_ORDER;
 localparam integer TLB_IDX_BITS = $clog2(N_ASSOC);
 
 // -- FSM
-typedef enum logic[1:0]  {ST_IDLE, ST_WAIT_1, ST_WAIT_2, ST_COMP} state_t;
-logic [1:0] state_C, state_N;
+typedef enum logic[2:0]  {
+    ST_IDLE, ST_WAIT_1, ST_WAIT_2, ST_COMP, 
+    ST_UPDATE_PG_BITS, ST_UPDATE_PG_BITS_WAIT_1, ST_UPDATE_PG_BITS_WAIT_2, ST_UPDATE_PG_BITS_WAIT_3} state_t;
+logic [2:0] state_C, state_N;
 
 // -- Internal
 AXI4S axis_fifo_out ();
@@ -134,6 +137,10 @@ logic data_C_val;
 logic [VADDR_BITS+32-1:0] tlb_addr_extended;
 logic [TLB_ORDER-1:0] tlb_addr_idx;
 logic [TAG_BITS-1:0] tlb_addr_tag;
+
+logic [3:0] pg_bits_C, pg_bits_N;
+logic [3:0] pg_bits_update_pending;
+logic [TLB_ORDER-1:0] pg_bits_update_tlb_clear_idx;
 
 // -- Def -----------------------------------------------------------
 // ------------------------------------------------------------------
@@ -199,6 +206,7 @@ end
 always_ff @( posedge aclk ) begin : PROC_LUP
     if(aresetn == 1'b0) begin
         state_C <= ST_IDLE;
+        pg_bits_C <= DEF_PG_BITS;
 
         data_C = 0;
 
@@ -214,6 +222,7 @@ always_ff @( posedge aclk ) begin : PROC_LUP
     end
     else begin
         state_C <= state_N;
+        pg_bits_C <= pg_bits_N;
 
         data_C  = data_N;
 
@@ -235,7 +244,9 @@ always_comb begin: NSL
 
 	case(state_C)
 		ST_IDLE: 
-            state_N = axis_s0.tvalid ? ST_WAIT_1 : ST_IDLE; 
+            state_N = axis_s0.tvalid ? 
+              (axis_s0.tdata[127:64] == 64'h8000_0000_0000_0000 ? ST_UPDATE_PG_BITS : ST_WAIT_1) : 
+              (ST_IDLE); 
             
         ST_WAIT_1:
             state_N = ST_WAIT_2;
@@ -246,12 +257,30 @@ always_comb begin: NSL
         ST_COMP:
             state_N = ST_IDLE;
 
+        ST_UPDATE_PG_BITS:
+            if (pg_bits_update_tlb_clear_idx != {TLB_ORDER{1'b1}}) begin
+                state_N = ST_UPDATE_PG_BITS;
+            end else begin
+                state_N = ST_UPDATE_PG_BITS_WAIT_1;
+            end
+        
+        ST_UPDATE_PG_BITS_WAIT_1:
+            state_N = ST_UPDATE_PG_BITS_WAIT_2;
+        
+        ST_UPDATE_PG_BITS_WAIT_2:
+            state_N = ST_UPDATE_PG_BITS_WAIT_3;
+
+        ST_UPDATE_PG_BITS_WAIT_3:
+            state_N = ST_IDLE;
+
 	endcase // state_C
 end
 
 // DP 
 always_comb begin
-    data_N  = data_C;
+    data_N    = data_C;
+    pg_bits_N = pg_bits_C;
+    pg_bits   = pg_bits_C; // for output
 
     // Input
     axis_s0.tready = 1'b0;
@@ -332,6 +361,23 @@ always_comb begin
             end
         end
 
+        ST_UPDATE_PG_BITS:
+            // Clear TLB
+            for (int i = 0; i < N_ASSOC; i++) begin
+                tlb_addr[i] = pg_bits_update_tlb_clear_idx;
+                tlb_wr_en[i] = ~0;
+                tlb_data_upd_in[i] = 0;
+                ref_r_addr[i] = pg_bits_update_tlb_clear_idx;
+                ref_r_wr_en[i] = ~0;
+                ref_r_data_upd_in[i] = 0;
+                ref_m_addr[i] = pg_bits_update_tlb_clear_idx;
+                ref_m_wr_en[i] = ~0;
+                ref_m_data_upd_in[i] = 0;
+            end
+
+        ST_UPDATE_PG_BITS_WAIT_3:
+            pg_bits_N = pg_bits_update_pending;
+
     endcase
 end
 
@@ -349,7 +395,7 @@ always_comb begin
     tlb_addr_idx      = 0;
     tlb_addr_tag      = 0;
 
-    if (pg_bits == 12) begin
+    if (pg_bits_C == 12) begin
         // 4K
         data_C_phy[0 +: (PADDR_BITS - 12)]             = data_C[0 +: (PADDR_BITS - 12)];
         data_C_tag[0 +: (VADDR_BITS - TLB_ORDER - 12)] = data_C[64+TLB_ORDER +: (VADDR_BITS - TLB_ORDER - 12)];
@@ -359,7 +405,7 @@ always_comb begin
 
         tlb_addr_idx                                   = tlb_addr_extended[12 +: TLB_ORDER];
         tlb_addr_tag                                   = tlb_addr_extended[12+TLB_ORDER +: TAG_BITS];
-    end else if (pg_bits == 21) begin
+    end else if (pg_bits_C == 21) begin
         // 2M
         data_C_phy[0 +: (PADDR_BITS - 21)]             = data_C[0 +: (PADDR_BITS - 21)];
         data_C_tag[0 +: (VADDR_BITS - TLB_ORDER - 21)] = data_C[64+TLB_ORDER +: (VADDR_BITS - TLB_ORDER - 21)];
@@ -369,7 +415,7 @@ always_comb begin
 
         tlb_addr_idx                                   = tlb_addr_extended[21 +: TLB_ORDER];
         tlb_addr_tag                                   = tlb_addr_extended[21+TLB_ORDER +: TAG_BITS];
-    end else if (pg_bits == 30) begin
+    end else if (pg_bits_C == 30) begin
         // 1G
         data_C_phy[0 +: (PADDR_BITS - 30)]             = data_C[0 +: (PADDR_BITS - 30)];
         data_C_tag[0 +: (VADDR_BITS - TLB_ORDER - 30)] = data_C[64+TLB_ORDER +: (VADDR_BITS - TLB_ORDER - 30)];
@@ -460,6 +506,23 @@ always_ff @( posedge aclk ) begin : TLB_CLR
     end
 end
 
+// Update pg_bits
+always_ff @( posedge aclk ) begin
+    if(aresetn == 1'b0) begin
+        pg_bits_update_pending <= 0;
+        pg_bits_update_tlb_clear_idx <= 0;
+    end else begin
+        pg_bits_update_pending <= pg_bits_update_pending;
+        pg_bits_update_tlb_clear_idx <= pg_bits_update_tlb_clear_idx;
+        if (state_C == ST_IDLE) begin
+            pg_bits_update_pending <= axis_s0.tdata[3:0];
+            pg_bits_update_tlb_clear_idx <= 0;
+        end else if (state_C == ST_UPDATE_PG_BITS) begin
+            pg_bits_update_tlb_clear_idx <= pg_bits_update_tlb_clear_idx + 1;
+        end
+    end
+end
+
 //
 // External FSM access
 //
@@ -509,7 +572,7 @@ end
 //`define DBG_TLB_CONTROLLER
 `ifdef DBG_TLB_CONTROLLER
 
-if(pg_bits == 12) begin
+if(N_ASSOC == 4) begin
 if(ID_REG == 0) begin
 ila_tlb_ctrl inst_ila_tlb_ctrl (
     .clk(aclk),
@@ -519,7 +582,7 @@ ila_tlb_ctrl inst_ila_tlb_ctrl (
     .probe3(TLB.strm),
     .probe4(TLB.hit),
     .probe5(TLB.addr), // 48
-    .probe6(TLB.data), // 96
+    .probe6(TLB.data), // 104
     .probe7(state_C), // 2
     .probe8(axis_s0.tvalid),
     .probe9(axis_s0.tready),

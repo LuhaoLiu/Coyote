@@ -44,7 +44,7 @@ module mmu_region_top #(
 ) (
 	// AXI tlb control and writeback
     AXI4L.s   							s_axi_ctrl_sTlb,
-    AXI4L.s   							s_axi_ctrl_lTlb,
+    AXI4L.s   							s_axi_ctrl_dTlb,
 
 	// Requests user
 	metaIntf.s 						    s_bpss_rd_sq,
@@ -106,14 +106,17 @@ localparam integer TLB_L_DATA_BITS = TAG_L_BITS + PID_BITS + 2 + PHY_L_BITS + HP
 localparam integer TLB_S_DATA_BITS = TAG_S_BITS + PID_BITS + 2 + PHY_S_BITS + HPID_BITS;
 
 // Tlb interfaces
-tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) rd_lTlb ();
+tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) rd_dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) rd_sTlb ();
-tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) wr_lTlb ();
+tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) wr_dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) wr_sTlb ();
-tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) lTlb ();
+tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) sTlb ();
 
-AXI4S #(.AXI4S_DATA_BITS(AXI_TLB_BITS)) axis_lTlb ();
+logic [3:0] dTlb_pg_bits;
+logic [3:0] sTlb_pg_bits;
+
+AXI4S #(.AXI4S_DATA_BITS(AXI_TLB_BITS)) axis_dTlb ();
 AXI4S #(.AXI4S_DATA_BITS(AXI_TLB_BITS)) axis_sTlb ();
 
 // Request interfaces
@@ -149,69 +152,71 @@ end
 // ----------------------------------------------------------------------------------------
 // TLB
 // ---------------------------------------------------------------------------------------- 
-assign rd_lTlb.data = lTlb.data;
-assign wr_lTlb.data = lTlb.data;
+assign rd_dTlb.data = dTlb.data;
+assign wr_dTlb.data = dTlb.data;
 assign rd_sTlb.data = sTlb.data;
 assign wr_sTlb.data = sTlb.data;
-assign rd_lTlb.hit  = lTlb.hit;
-assign wr_lTlb.hit  = lTlb.hit;
+assign rd_dTlb.hit  = dTlb.hit;
+assign wr_dTlb.hit  = dTlb.hit;
 assign rd_sTlb.hit  = sTlb.hit;
 assign wr_sTlb.hit  = sTlb.hit;
 
-assign lTlb.addr  = mutex[1] ? wr_lTlb.addr : rd_lTlb.addr;
+assign dTlb.addr  = mutex[1] ? wr_dTlb.addr : rd_dTlb.addr;
 assign sTlb.addr  = mutex[1] ? wr_sTlb.addr : rd_sTlb.addr;
-assign lTlb.pid   = mutex[1] ? wr_lTlb.pid : rd_lTlb.pid;
+assign dTlb.pid   = mutex[1] ? wr_dTlb.pid : rd_dTlb.pid;
 assign sTlb.pid   = mutex[1] ? wr_sTlb.pid : rd_sTlb.pid;
-assign lTlb.strm  = mutex[1] ? wr_lTlb.strm : rd_lTlb.strm;
+assign dTlb.strm  = mutex[1] ? wr_dTlb.strm : rd_dTlb.strm;
 assign sTlb.strm  = mutex[1] ? wr_sTlb.strm : rd_sTlb.strm;
-assign lTlb.wr    = mutex[1] ? wr_lTlb.wr : rd_lTlb.wr;
+assign dTlb.wr    = mutex[1] ? wr_dTlb.wr : rd_dTlb.wr;
 assign sTlb.wr    = mutex[1] ? wr_sTlb.wr : rd_sTlb.wr;
-assign lTlb.valid = mutex[1] ? wr_lTlb.valid : rd_lTlb.valid;
+assign dTlb.valid = mutex[1] ? wr_dTlb.valid : rd_dTlb.valid;
 assign sTlb.valid = mutex[1] ? wr_sTlb.valid : rd_sTlb.valid;
 
 // TLBs
 tlb_controller #(
     .TLB_ORDER(TLB_L_ORDER),
+    .DEF_PG_BITS(PG_L_BITS),
     .N_ASSOC(N_L_ASSOC),
     .DBG_L(1),
     .ID_REG(ID_REG)
-) inst_lTlb (
+) inst_dTlb (
     .aclk(aclk),
     .aresetn(aresetn),
-    .pg_bits(PG_L_BITS),
-    .s_axis(axis_lTlb),
-    .TLB(lTlb)
+    .pg_bits(dTlb_pg_bits),
+    .s_axis(axis_dTlb),
+    .TLB(dTlb)
 );
 
 tlb_controller #(
     .TLB_ORDER(TLB_S_ORDER),
+    .DEF_PG_BITS(PG_S_BITS),
     .N_ASSOC(N_S_ASSOC),
     .DBG_S(1),
     .ID_REG(ID_REG)
 ) inst_sTlb (
     .aclk(aclk),
     .aresetn(aresetn),
-    .pg_bits(PG_S_BITS),
+    .pg_bits(sTlb_pg_bits),
     .s_axis(axis_sTlb),
     .TLB(sTlb)
 );
 
 // TLB slaves
 tlb_slave_axil #(
-    .TLB_ORDER(TLB_L_ORDER),
-    .PG_BITS(PG_L_BITS),
-    .N_ASSOC(N_L_ASSOC)
-) inst_lTlb_slv_0 (
+    // .TLB_ORDER(TLB_L_ORDER),
+    // .PG_BITS(PG_L_BITS),
+    // .N_ASSOC(N_L_ASSOC)
+) inst_dTlb_slv_0 (
     .aclk(aclk),
     .aresetn(aresetn),
-    .s_axi_ctrl(s_axi_ctrl_lTlb),
-    .m_axis(axis_lTlb)
+    .s_axi_ctrl(s_axi_ctrl_dTlb),
+    .m_axis(axis_dTlb)
 );
 
 tlb_slave_axil #(
-    .TLB_ORDER(TLB_S_ORDER),
-    .PG_BITS(PG_S_BITS),
-    .N_ASSOC(N_S_ASSOC)
+    // .TLB_ORDER(TLB_S_ORDER),
+    // .PG_BITS(PG_S_BITS),
+    // .N_ASSOC(N_S_ASSOC)
 ) inst_sTlb_slv_0 (
     .aclk(aclk),
     .aresetn(aresetn),
@@ -265,8 +270,10 @@ tlb_fsm #(
 ) inst_fsm_rd (
     .aclk(aclk),
     .aresetn(aresetn),
-    .aTlb(rd_lTlb),
-    .bTlb(rd_sTlb),
+    .pg_bits_d(dTlb_pg_bits),
+    .pg_bits_s(sTlb_pg_bits),
+    .dTlb(rd_dTlb),
+    .sTlb(rd_sTlb),
 `ifdef EN_STRM
     .m_host_done(m_rd_host_done),
     .m_HDMA(rd_HDMA_fsm),
@@ -296,8 +303,10 @@ tlb_fsm #(
 ) inst_fsm_wr (
     .aclk(aclk),
     .aresetn(aresetn),
-    .aTlb(wr_lTlb),
-    .bTlb(wr_sTlb),
+    .pg_bits_d(dTlb_pg_bits),
+    .pg_bits_s(sTlb_pg_bits),
+    .dTlb(wr_dTlb),
+    .sTlb(wr_sTlb),
 `ifdef EN_STRM
     .m_host_done(m_wr_host_done),
     .m_HDMA(wr_HDMA_fsm),

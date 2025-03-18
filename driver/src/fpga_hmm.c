@@ -86,7 +86,7 @@ int mmu_handler_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cp
     mmap_read_lock(curr_mm);
 
     // hugepages?
-    tlb_order = hugepages ? pd->ltlb_order : pd->stlb_order;
+    tlb_order = hugepages ? pd->dtlb_order : pd->stlb_order;
     dbg_info("passed region thp %d\n", hugepages);
 
     // number of pages (huge or regular)
@@ -152,7 +152,7 @@ bool cyt_interval_invalidate(struct mmu_interval_notifier *interval_sub, const s
     struct vm_area_struct *vma = range->vma;
     bool huge = is_thp(vma, range->start, NULL);
     struct bus_drvdata *pd = d->pd;
-    struct tlb_order *order = huge ? pd->ltlb_order : pd->stlb_order;
+    struct tlb_order *order = huge ? pd->dtlb_order : pd->stlb_order;
     uint64_t start = range->start & order->page_mask;
     uint64_t end = (range->end + order->page_size - 1) & order->page_mask;
     uint64_t first, last;
@@ -368,7 +368,7 @@ vm_fault_t cpu_migrate_to_host(struct vm_fault *vmf)
     bool hugepages = zone_data->huge;
     struct fpga_dev *d = vmf->page->pgmap->owner;
     struct bus_drvdata *pd = d->pd;
-    struct tlb_order *order = hugepages ? pd->ltlb_order : pd->stlb_order;
+    struct tlb_order *order = hugepages ? pd->dtlb_order : pd->stlb_order;
     uint64_t start = vmf->address & order->page_mask;
     uint64_t end = start + order->page_size;
     uint32_t n_pages = hugepages ? pd->n_pages_in_huge : 1;
@@ -1175,7 +1175,7 @@ void tlb_map_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t *paddr, uint32_t n
         if(paddr[i] == 0)
             continue;
         
-        tlb_create_map(d, huge ? pd->ltlb_order : pd->stlb_order, tmp_vaddr, paddr[i], host, cpid, hpid);
+        tlb_create_map(d, huge ? pd->dtlb_order : pd->stlb_order, tmp_vaddr, paddr[i], host, cpid, hpid);
         
         tmp_vaddr += pg_inc;
     }
@@ -1202,7 +1202,7 @@ void tlb_unmap_hmm(struct fpga_dev *d, uint64_t vaddr, uint32_t n_pages, pid_t h
 
     tmp_vaddr = vaddr;
     for (i = 0; i < n_map_pages; i+=pg_inc) {
-        tlb_create_unmap(d, huge ? pd->ltlb_order : pd->stlb_order, tmp_vaddr, hpid);
+        tlb_create_unmap(d, huge ? pd->dtlb_order : pd->stlb_order, tmp_vaddr, hpid);
         
         tmp_vaddr += pg_inc;
     }

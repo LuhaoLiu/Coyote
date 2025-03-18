@@ -584,6 +584,20 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         }
 
         break;
+    
+    case IOCTL_DTLB_SET_PGSIZE:
+        ret_val = copy_from_user(&tmp, (unsigned long *) arg, sizeof(unsigned long));
+        if (ret_val != 0) {
+            pr_info("user data could not be coppied, return %d\n", ret_val);
+        } else {
+            unsigned int pgsize = (uint32_t) tmp[0];
+            if (pgsize != 12 || pgsize != 21) {
+                pr_info("invalid page size %d\n", pgsize);
+            } else {
+                update_dtlb_pgsize(d, pgsize);
+                dbg_info("setting page size to %d", pgsize);
+            }
+        }
 
     default:
         break;

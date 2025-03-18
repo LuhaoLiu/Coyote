@@ -126,22 +126,22 @@ int read_shell_config(struct bus_drvdata *d)
     d->stlb_order->phy_mask = (1UL << d->stlb_order->phy_size) - 1UL;
     pr_info("sTLB order %lld, sTLB assoc %d, sTLB page size %lld\n", d->stlb_order->key_size, d->stlb_order->assoc, d->stlb_order->page_size);
 
-    d->ltlb_order = kzalloc(sizeof(struct tlb_order), GFP_KERNEL);
-    BUG_ON(!d->ltlb_order);
-    d->ltlb_order->hugepage = true;
-    d->ltlb_order->key_size = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_ORDER_MASK) >> TLB_L_ORDER_SHFT;
-    d->ltlb_order->assoc = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_ASSOC_MASK) >> TLB_L_ASSOC_SHFT;
-    d->ltlb_order->page_shift = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_PG_SHFT_MASK) >> TLB_L_PG_SHFT_SHFT;
-    d->ltlb_order->page_size = 1UL << d->ltlb_order->page_shift;
-    d->ltlb_order->page_mask = (~(d->ltlb_order->page_size - 1));
-    d->ltlb_order->key_mask = (1UL << d->ltlb_order->key_size) - 1UL;
-    d->ltlb_order->tag_size = TLB_VADDR_RANGE - d->ltlb_order->page_shift  - d->ltlb_order->key_size;
-    d->ltlb_order->tag_mask = (1UL << d->ltlb_order->tag_size) - 1UL;
-    d->ltlb_order->phy_size = TLB_PADDR_RANGE - d->ltlb_order->page_shift ;
-    d->ltlb_order->phy_mask = (1UL << d->ltlb_order->phy_size) - 1UL;
-    pr_info("lTLB order %lld, lTLB assoc %d, lTLB page size %lld\n", d->ltlb_order->key_size, d->ltlb_order->assoc, d->ltlb_order->page_size);
+    d->dtlb_order = kzalloc(sizeof(struct tlb_order), GFP_KERNEL);
+    BUG_ON(!d->dtlb_order);
+    d->dtlb_order->hugepage = true;
+    d->dtlb_order->key_size = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_ORDER_MASK) >> TLB_L_ORDER_SHFT;
+    d->dtlb_order->assoc = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_ASSOC_MASK) >> TLB_L_ASSOC_SHFT;
+    d->dtlb_order->page_shift = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_PG_SHFT_MASK) >> TLB_L_PG_SHFT_SHFT;
+    d->dtlb_order->page_size = 1UL << d->dtlb_order->page_shift;
+    d->dtlb_order->page_mask = (~(d->dtlb_order->page_size - 1));
+    d->dtlb_order->key_mask = (1UL << d->dtlb_order->key_size) - 1UL;
+    d->dtlb_order->tag_size = TLB_VADDR_RANGE - d->dtlb_order->page_shift  - d->dtlb_order->key_size;
+    d->dtlb_order->tag_mask = (1UL << d->dtlb_order->tag_size) - 1UL;
+    d->dtlb_order->phy_size = TLB_PADDR_RANGE - d->dtlb_order->page_shift ;
+    d->dtlb_order->phy_mask = (1UL << d->dtlb_order->phy_size) - 1UL;
+    pr_info("lTLB order %lld, lTLB assoc %d, lTLB page size %lld\n", d->dtlb_order->key_size, d->dtlb_order->assoc, d->dtlb_order->page_size);
 
-    d->dif_order_page_shift = d->ltlb_order->page_shift - d->stlb_order->page_shift;
+    d->dif_order_page_shift = d->dtlb_order->page_shift - d->stlb_order->page_shift;
     d->dif_order_page_size = 1 << d->dif_order_page_shift;
     d->dif_order_page_mask = d->dif_order_page_size - 1;
     d->n_pages_in_huge = 1 << d->dif_order_page_shift;
@@ -474,7 +474,7 @@ int init_fpga_devices(struct bus_drvdata *d)
         d->fpga_dev[i].fpga_phys_addr_ctrl_avx = d->bar_phys_addr[BAR_SHELL_CONFIG] + FPGA_CTRL_CNFG_AVX_OFFS + i * FPGA_CTRL_CNFG_AVX_SIZE;
         
         // MMU control region
-        d->fpga_dev[i].fpga_lTlb = ioremap(d->fpga_dev[i].fpga_phys_addr_ctrl + FPGA_CTRL_LTLB_OFFS, FPGA_CTRL_LTLB_SIZE);
+        d->fpga_dev[i].fpga_dTlb = ioremap(d->fpga_dev[i].fpga_phys_addr_ctrl + FPGA_CTRL_DTLB_OFFS, FPGA_CTRL_DTLB_SIZE);
         d->fpga_dev[i].fpga_sTlb = ioremap(d->fpga_dev[i].fpga_phys_addr_ctrl + FPGA_CTRL_STLB_OFFS, FPGA_CTRL_STLB_SIZE);
 
         // FPGA engine control

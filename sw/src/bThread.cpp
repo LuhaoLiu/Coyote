@@ -705,6 +705,15 @@ void bThread::freeMem(void* vaddr) {
 	}
 }
 
+// Set the page size for discrete TLB
+void bThread::setDTlbPgsize(uint32_t pgsize) {
+    uint64_t tmp[maxUserCopyVals];
+    tmp[0] = static_cast<uint64_t>(pgsize);
+
+    if(ioctl(fd, IOCTL_DTLB_SET_PGSIZE, &tmp))
+        throw std::runtime_error("ioctl_set_tlb_pg_size() failed");
+}
+
 // ======-------------------------------------------------------------------------------
 // Bulk transfers
 // ======-------------------------------------------------------------------------------

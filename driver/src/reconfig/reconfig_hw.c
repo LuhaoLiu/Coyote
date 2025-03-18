@@ -8,6 +8,7 @@ int reconfigure_start(struct reconfig_dev *device, uint64_t virtual_address, uin
     struct bus_drvdata *bus_data = device->pd;
     BUG_ON(!bus_data);
 
+    // TODO: NEW TLB
     // Iterate through all the entries of allocated buffers
     // Where the virtual address, PID and configuration ID (crid) match, trigger reconfig by writing to FPGA memory
     int cmd_sent = 0;
@@ -15,7 +16,7 @@ int reconfigure_start(struct reconfig_dev *device, uint64_t virtual_address, uin
     hash_for_each_possible(reconfig_buffs_map, tmp_buff, entry, virtual_address) {
         if (tmp_buff->vaddr == virtual_address && tmp_buff->pid == pid && tmp_buff->crid == crid) {
             // Bitsreams are always loaded to FPGA memory in buffers of hugepages
-            uint64_t bitstream_page_size = bus_data->ltlb_order->page_size;
+            uint64_t bitstream_page_size = bus_data->dtlb_order->page_size;
 
             uint64_t n_bistream_full_pages = len / bitstream_page_size;
             uint64_t partial_bitsream_size = len % bitstream_page_size;

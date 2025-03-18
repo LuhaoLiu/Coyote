@@ -155,6 +155,8 @@ public:
     void* getMem(csAlloc&& cs_alloc);
 	void freeMem(void* vaddr);
 
+	void setDTlbPgsize(uint32_t pgsize);
+
 	/**
 	 * @brief CSR registers
 	 * 

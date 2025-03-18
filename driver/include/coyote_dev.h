@@ -273,8 +273,8 @@ extern char *config_fname;
 /* FPGA control regions */
 #define FPGA_CTRL_SIZE 256 * 1024
 #define FPGA_CTRL_OFFS 0x100000
-#define FPGA_CTRL_LTLB_SIZE FPGA_CTRL_SIZE / 4
-#define FPGA_CTRL_LTLB_OFFS 0x0
+#define FPGA_CTRL_DTLB_SIZE FPGA_CTRL_SIZE / 4
+#define FPGA_CTRL_DTLB_OFFS 0x0
 #define FPGA_CTRL_STLB_SIZE FPGA_CTRL_SIZE / 4
 #define FPGA_CTRL_STLB_OFFS 0x10000
 #define FPGA_CTRL_USER_SIZE FPGA_CTRL_SIZE / 4
@@ -403,6 +403,8 @@ extern char *config_fname;
 #define IOCTL_SHELL_NET_STATS _IOR('F', 17, unsigned long) // status network
 
 #define IOCTL_SET_NOTIFICATION_PROCESSED _IOR('F', 18, unsigned long)
+
+#define IOCTL_DTLB_SET_PGSIZE _IOW('F', 19, unsigned long) // set pg size of dTlb
 
 #define IOCTL_ALLOC_HOST_RECONFIG_MEM _IOW('P', 1, unsigned long) // pr alloc
 #define IOCTL_FREE_HOST_RECONFIG_MEM _IOW('P', 2, unsigned long) //
@@ -824,8 +826,8 @@ struct fpga_dev {
     uint64_t wb_phys_addr;
 
     // TLBs
-    volatile uint64_t *fpga_lTlb; // large page TLB
-    volatile uint64_t *fpga_sTlb; // small page TLB
+    volatile uint64_t *fpga_dTlb; // discrete TLB (deafult in large page)
+    volatile uint64_t *fpga_sTlb; // stream TLB (TODO, now discrete TLB in small page)
     volatile struct fpga_cnfg_regs *fpga_cnfg; // config
 
     // IRQ
@@ -947,7 +949,7 @@ struct bus_drvdata {
 
     // TLB order
     struct tlb_order *stlb_order;
-    struct tlb_order *ltlb_order;
+    struct tlb_order *dtlb_order;
     int32_t dif_order_page_shift;
     int32_t dif_order_page_size;
     int32_t dif_order_page_mask;

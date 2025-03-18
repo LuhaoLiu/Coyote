@@ -333,9 +333,9 @@ ssize_t cyt_attr_cnfg_show(struct kobject *kobj, struct kobj_attribute *attr, ch
     pd->stlb_order->key_size,
     pd->stlb_order->assoc,
     pd->stlb_order->page_size,
-    pd->ltlb_order->key_size,
-    pd->ltlb_order->assoc,
-    pd->ltlb_order->page_size
+    pd->dtlb_order->key_size,
+    pd->dtlb_order->assoc,
+    pd->dtlb_order->page_size
   );
 }
 

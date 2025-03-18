@@ -242,8 +242,9 @@ void card_free(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
  * @param cpid - Coyote PID
  * @param hpid - host PID
  * @param entry - liste entry
+ * @param tlb_type - TLB type (0: stream, 1: discrete)
  */
-void tlb_create_map(struct fpga_dev *d, struct tlb_order *tlb_ord, uint64_t vaddr, uint64_t paddr, int32_t host, int32_t cpid, pid_t hpid)
+void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t paddr, int32_t host, int32_t cpid, pid_t hpid, int tlb_type)
 {
     uint64_t key;
     uint64_t tag;
@@ -252,27 +253,32 @@ void tlb_create_map(struct fpga_dev *d, struct tlb_order *tlb_ord, uint64_t vadd
 
     BUG_ON(!d);
 
-    key = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
-    tag = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
-    phys_addr = (paddr >> tlb_ord->page_shift) & tlb_ord->phy_mask;
+    if (tlb_type == 0) {
+        // TODO: NEW TLB
+        BUG();
+    } else if (tlb_type == 1) {
+        struct tlb_order *tlb_ord = d->pd->dtlb_order;
+        if (tlb_ord->hugepage != huge) BUG();
 
-    // new entry
-    entry[0] |= phys_addr | ((uint64_t)hpid << 32);
-    entry[1] |= key | (tag            << (tlb_ord->key_size)) 
-                    | ((uint64_t)cpid << (tlb_ord->key_size + tlb_ord->tag_size))
-                    | ((uint64_t)host << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE))
-                    | (1UL            << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE))
-                    | (phys_addr      << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE + 1));
+        key = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
+        tag = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
+        phys_addr = (paddr >> tlb_ord->page_shift) & tlb_ord->phy_mask;
 
-    dbg_info("creating new TLB entry, vaddr_fa %llx, paddr %llx, strm %d, cpid %d, hpid %d, hugepage %d\n", vaddr, paddr, host, cpid, hpid, tlb_ord->hugepage);
+        // new entry
+        entry[0] |= phys_addr | ((uint64_t)hpid << 32);
+        entry[1] |= key | (tag            << (tlb_ord->key_size)) 
+                        | ((uint64_t)cpid << (tlb_ord->key_size + tlb_ord->tag_size))
+                        | ((uint64_t)host << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE))
+                        | (1UL            << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
+                        // | (phys_addr      << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE + 1)); // no need for this
 
-    // map each page through AXIL
-    if(tlb_ord->hugepage) {
-        d->fpga_lTlb[0] = entry[0];
-        d->fpga_lTlb[1] = entry[1];
+        dbg_info("creating new TLB entry, vaddr_fa %llx, paddr %llx, strm %d, cpid %d, hpid %d, hugepage %d\n", vaddr, paddr, host, cpid, hpid, tlb_ord->hugepage);
+
+        // map each page through AXIL
+        d->fpga_dTlb[0] = entry[0];
+        d->fpga_dTlb[1] = entry[1];
     } else {
-        d->fpga_sTlb[0] = entry[0];
-        d->fpga_sTlb[1] = entry[1];
+        BUG();
     }
 }
 
@@ -282,8 +288,9 @@ void tlb_create_map(struct fpga_dev *d, struct tlb_order *tlb_ord, uint64_t vadd
  * @param vaddr - starting vaddr
  * @param cpid - Coyote PID
  * @param entry - list entry
+ * @param tlb_type - TLB type (0: stream, 1: discrete)
  */
-void tlb_create_unmap(struct fpga_dev *d, struct tlb_order *tlb_ord, uint64_t vaddr, pid_t hpid)
+void tlb_create_unmap(struct fpga_dev *d, uint64_t vaddr, bool huge, pid_t hpid, int tlb_type)
 {
     uint64_t tag;
     uint64_t key;
@@ -291,23 +298,79 @@ void tlb_create_unmap(struct fpga_dev *d, struct tlb_order *tlb_ord, uint64_t va
 
     BUG_ON(!d);
 
-    key = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
-    tag = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
+    if (tlb_type == 0) {
+        // TODO: NEW TLB
+        BUG();
+    } else if (tlb_type == 1) {
+        struct tlb_order *tlb_ord = d->pd->dtlb_order;
+        if (tlb_ord->hugepage != huge) BUG();
 
-    // entry host
-    entry[0] |= ((uint64_t)hpid << 32);
-    entry[1] |= key | (tag << (tlb_ord->key_size)) 
-                    | (0UL << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
-
-    dbg_info("unmapping TLB entry, vaddr_fa %llx, hpid %d, hugepage %d\n", vaddr, hpid, tlb_ord->hugepage);
-
-    // map each page through AXIL
-    if(tlb_ord->hugepage) {
-        d->fpga_lTlb[0] = entry[0];
-        d->fpga_lTlb[1] = entry[1];
+        key = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
+        tag = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
+    
+        // entry host
+        entry[0] |= ((uint64_t)hpid << 32);
+        entry[1] |= key | (tag << (tlb_ord->key_size)) 
+                        | (0UL << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
+    
+        dbg_info("unmapping TLB entry, vaddr_fa %llx, hpid %d, hugepage %d\n", vaddr, hpid, tlb_ord->hugepage);
+    
+        // map each page through AXIL
+        d->fpga_dTlb[0] = entry[0];
+        d->fpga_dTlb[1] = entry[1];
     } else {
-        d->fpga_sTlb[0] = entry[0];
-        d->fpga_sTlb[1] = entry[1];
+        BUG();
+    }
+}
+
+void update_dtlb_pgsize(struct fpga_dev *d, unsigned int pgsize)
+{
+    uint64_t entry [2];
+    struct tlb_order *tlb_ord = d->pd->dtlb_order;
+
+    entry[0] = (1ULL << 63);
+    entry[1] = (uint64_t)pgsize;
+
+    if (pgsize == 12) {
+        // 4K page
+        if (!tlb_ord->hugepage) {
+            // do nothing
+        } else {
+            // notify hardware
+            d->fpga_dTlb[0] = entry[0];
+            d->fpga_dTlb[1] = entry[1];
+            // update structure
+            tlb_ord->hugepage = false;
+            tlb_ord->page_shift = pgsize;
+            tlb_ord->page_size = PAGE_SIZE;
+            tlb_ord->page_mask = PAGE_MASK;
+            tlb_ord->key_mask = (1UL << tlb_ord->key_size) - 1UL;
+            tlb_ord->tag_size = TLB_VADDR_RANGE - tlb_ord->page_shift - tlb_ord->key_size;
+            tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
+            tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_shift;
+            tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
+        }
+    } else if (pgsize == 21) {
+        // 2M huge page
+        if (tlb_ord->hugepage) {
+            // do nothing
+        } else {
+            // notify hardware
+            d->fpga_dTlb[0] = entry[0];
+            d->fpga_dTlb[1] = entry[1];
+            // update structure
+            tlb_ord->hugepage = true;
+            tlb_ord->page_shift = pgsize;
+            tlb_ord->page_size = 1UL << tlb_ord->page_shift;
+            tlb_ord->page_mask = (~(tlb_ord->page_size - 1));
+            tlb_ord->key_mask = (1UL << tlb_ord->key_size) - 1UL;
+            tlb_ord->tag_size = TLB_VADDR_RANGE - tlb_ord->page_shift - tlb_ord->key_size;
+            tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
+            tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_shift;
+            tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
+        }
+    } else {
+        BUG();
     }
 }
 

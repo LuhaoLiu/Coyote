@@ -113,8 +113,8 @@ tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) wr_sTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) sTlb ();
 
-logic [3:0] dTlb_pg_bits;
-logic [3:0] sTlb_pg_bits;
+logic [4:0] dTlb_pg_bits;
+logic [4:0] sTlb_pg_bits;
 
 AXI4S #(.AXI4S_DATA_BITS(AXI_TLB_BITS)) axis_dTlb ();
 AXI4S #(.AXI4S_DATA_BITS(AXI_TLB_BITS)) axis_sTlb ();

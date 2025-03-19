@@ -389,3 +389,7 @@ set_property -dict [list CONFIG.ADDR_WIDTH {34} CONFIG.DATA_WIDTH {512} CONFIG.I
 
 create_ip -name axi_clock_converter -vendor xilinx.com -library ip -version 2.1 -module_name axi_ccross_ddr_src_int
 set_property -dict [list CONFIG.ADDR_WIDTH {34} CONFIG.DATA_WIDTH {512} CONFIG.ID_WIDTH {4}] [get_ips axi_ccross_ddr_src_int]
+
+# TLB CTRL ILA
+create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_tlb_ctrl
+set_property -dict [list CONFIG.C_PROBE24_WIDTH {5} CONFIG.C_PROBE21_WIDTH {10} CONFIG.C_PROBE20_WIDTH {10} CONFIG.C_PROBE18_WIDTH {32} CONFIG.C_PROBE21_WIDTH {10} CONFIG.C_PROBE16_WIDTH {2} CONFIG.C_PROBE25_WIDTH {2} CONFIG.C_PROBE14_WIDTH {2} CONFIG.C_PROBE12_WIDTH {2} CONFIG.C_PROBE11_WIDTH {128} CONFIG.C_PROBE10_WIDTH {128} CONFIG.C_PROBE7_WIDTH {3} CONFIG.C_PROBE6_WIDTH {104} CONFIG.C_PROBE5_WIDTH {48} CONFIG.C_PROBE3_WIDTH {2} CONFIG.C_PROBE2_WIDTH {6} CONFIG.C_NUM_OF_PROBES {25} CONFIG.Component_Name {ila_tlb_ctrl}] [get_ips ila_tlb_ctrl]

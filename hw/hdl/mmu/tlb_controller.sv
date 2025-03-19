@@ -138,8 +138,8 @@ logic [VADDR_BITS+32-1:0] tlb_addr_extended;
 logic [TLB_ORDER-1:0] tlb_addr_idx;
 logic [TAG_BITS-1:0] tlb_addr_tag;
 
-logic [3:0] pg_bits_C, pg_bits_N;
-logic [3:0] pg_bits_update_pending;
+logic [4:0] pg_bits_C, pg_bits_N;
+logic [4:0] pg_bits_update_pending;
 logic [TLB_ORDER-1:0] pg_bits_update_tlb_clear_idx;
 
 // -- Def -----------------------------------------------------------
@@ -515,7 +515,7 @@ always_ff @( posedge aclk ) begin
         pg_bits_update_pending <= pg_bits_update_pending;
         pg_bits_update_tlb_clear_idx <= pg_bits_update_tlb_clear_idx;
         if (state_C == ST_IDLE) begin
-            pg_bits_update_pending <= axis_s0.tdata[3:0];
+            pg_bits_update_pending <= axis_s0.tdata[4:0];
             pg_bits_update_tlb_clear_idx <= 0;
         end else if (state_C == ST_UPDATE_PG_BITS) begin
             pg_bits_update_tlb_clear_idx <= pg_bits_update_tlb_clear_idx + 1;
@@ -569,24 +569,45 @@ end
 /////////////////////////////////////////////////////////////////////////////
 // DEBUG
 /////////////////////////////////////////////////////////////////////////////
-//`define DBG_TLB_CONTROLLER
+`define DBG_TLB_CONTROLLER
 `ifdef DBG_TLB_CONTROLLER
 
-if(N_ASSOC == 4) begin
+wire ila_tlb_valid;
+wire ila_tlb_wr;
+wire [5:0] ila_tlb_pid;
+wire [1:0] ila_tlb_strm;
+wire ila_tlb_hit;
+wire [47:0] ila_tlb_addr;
+wire [103:0] ila_tlb_data;
+wire ila_axis_s0_tvalid;
+wire ila_axis_s0_tready;
+wire [127:0] ila_axis_s0_tdata; 
+assign ila_tlb_valid = TLB.valid;
+assign ila_tlb_wr = TLB.wr;
+assign ila_tlb_pid = TLB.pid;
+assign ila_tlb_strm = TLB.strm;
+assign ila_tlb_hit = TLB.hit;
+assign ila_tlb_addr = TLB.addr;
+assign ila_tlb_data = TLB.data;
+assign ila_axis_s0_tvalid = axis_s0.tvalid;
+assign ila_axis_s0_tready = axis_s0.tready;
+assign ila_axis_s0_tdata = axis_s0.tdata;
+
+if(DEF_PG_BITS == 21) begin
 if(ID_REG == 0) begin
 ila_tlb_ctrl inst_ila_tlb_ctrl (
     .clk(aclk),
-    .probe0(TLB.valid),
-    .probe1(TLB.wr),
-    .probe2(TLB.pid), // 6
-    .probe3(TLB.strm),
-    .probe4(TLB.hit),
-    .probe5(TLB.addr), // 48
-    .probe6(TLB.data), // 104
-    .probe7(state_C), // 2
-    .probe8(axis_s0.tvalid),
-    .probe9(axis_s0.tready),
-    .probe10(axis_s0.tdata), // 128
+    .probe0(ila_tlb_valid),
+    .probe1(ila_tlb_wr),
+    .probe2(ila_tlb_pid), // 6
+    .probe3(ila_tlb_strm), // 2
+    .probe4(ila_tlb_hit),
+    .probe5(ila_tlb_addr), // 48
+    .probe6(ila_tlb_data), // 104
+    .probe7(state_C), // 3
+    .probe8(ila_axis_s0_tvalid),
+    .probe9(ila_axis_s0_tready),
+    .probe10(ila_axis_s0_tdata), // 128
     .probe11(data_C), // 128
     .probe12(hit_idx), // 2
     .probe13(tlb_hit), 
@@ -599,7 +620,8 @@ ila_tlb_ctrl inst_ila_tlb_ctrl (
     .probe20(ref_tmr_addr), // 10
     .probe21(addr_ext[1]), // 10
     .probe22(wr_ext[1]), 
-    .probe23(val_ext[1])
+    .probe23(val_ext[1]),
+    .probe24(pg_bits) // 5
 );
 end
 end

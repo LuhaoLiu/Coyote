@@ -328,13 +328,14 @@ void update_dtlb_pgsize(struct fpga_dev *d, unsigned int pgsize)
     uint64_t entry [2];
     struct tlb_order *tlb_ord = d->pd->dtlb_order;
 
-    entry[0] = (1ULL << 63);
-    entry[1] = (uint64_t)pgsize;
+    entry[0] = (uint64_t)pgsize;
+    entry[1] = (1ULL << 63);
 
     if (pgsize == 12) {
         // 4K page
         if (!tlb_ord->hugepage) {
             // do nothing
+            dbg_info("hugepage already disabled, no update\n");
         } else {
             // notify hardware
             d->fpga_dTlb[0] = entry[0];
@@ -349,11 +350,13 @@ void update_dtlb_pgsize(struct fpga_dev *d, unsigned int pgsize)
             tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
             tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_shift;
             tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
+            dbg_info("set dtlb page size to %d\n", pgsize);
         }
     } else if (pgsize == 21) {
         // 2M huge page
         if (tlb_ord->hugepage) {
             // do nothing
+            dbg_info("hugepage already enabled, no update\n");
         } else {
             // notify hardware
             d->fpga_dTlb[0] = entry[0];
@@ -368,6 +371,7 @@ void update_dtlb_pgsize(struct fpga_dev *d, unsigned int pgsize)
             tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
             tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_shift;
             tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
+            dbg_info("set dtlb page size to %d\n", pgsize);
         }
     } else {
         BUG();

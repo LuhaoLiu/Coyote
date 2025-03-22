@@ -69,7 +69,8 @@ int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cp
     // hugepages?
     vma_area_init = find_vma(curr_mm, vaddr);
     hugepages = is_vm_hugetlb_page(vma_area_init);
-    tlb_order = hugepages ? pd->dtlb_order : pd->stlb_order;
+    // tlb_order = hugepages ? pd->dtlb_order : pd->stlb_order;
+    tlb_order = pd->dtlb_order; // TODO
 
     // align and shift (PAGE_SIZE)
     pfa.vaddr = (vaddr & tlb_order->page_mask) >> tlb_order->page_shift;
@@ -204,12 +205,13 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
         i = 0;
         while((i < n_pages) && (n_pg_mapped < MAX_N_MAP_PAGES)) {
             // coalesce
+            // TODO: coalesce may cause problem... 
             is_huge = false;
             if(n_pages >= pd->n_pages_in_huge) {
                 if(i <= n_pages - pd->n_pages_in_huge) {
-                    if((vaddr_tmp & pd->dif_order_page_mask) == 0) {
+                    if((vaddr_tmp & pd->dif_order_page_mask) == 0) { // TODO: set dif_oder_page_mask to FIXED
                         paddr_tmp = (user_pg->host == HOST_ACCESS) ? user_pg->hpages[i + pg_offs] : user_pg->cpages[i + pg_offs];
-                        if((paddr_tmp & ~pd->dtlb_order->page_mask) == 0) {
+                        if((paddr_tmp & ~pd->dtlb_order->page_mask) == 0) { // TODO: set this to FIXED
                             is_huge = true; 
                             for(j = i + 1; j < i + pd->n_pages_in_huge; j++) {
                                 paddr_curr = (user_pg->host == HOST_ACCESS) ? user_pg->hpages[j + pg_offs] : user_pg->cpages[j + pg_offs];
@@ -268,6 +270,7 @@ void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid)
         }
     } else {
         // unmap - regular (+coalesced)
+        // TODO: coalesce may cause problem...
         i = 0;
         while((i < n_pages)) {
             // coalesce

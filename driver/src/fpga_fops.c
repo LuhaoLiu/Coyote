@@ -591,7 +591,7 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             pr_info("user data could not be coppied, return %d\n", ret_val);
         } else {
             unsigned int pgsize = (uint32_t) tmp[0];
-            if (pgsize != 12 && pgsize != 21) {
+            if (pgsize != PAGE_SHIFT && pgsize != HPAGE_SHIFT) {
                 pr_info("invalid page size %d\n", pgsize);
             } else {
                 update_dtlb_pgsize(d, pgsize);

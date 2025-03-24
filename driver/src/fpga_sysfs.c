@@ -313,12 +313,9 @@ ssize_t cyt_attr_cnfg_show(struct kobject *kobj, struct kobj_attribute *attr, ch
     "enabled TCP/IP: %d\n"
     "enabled AVX: %d\n"
     "enabled writeback: %d\n"
-    "tlb regular order: %lld\n"
-    "tlb regular assoc: %d\n"
-    "tlb regular page size: %lld\n"
-    "tlb hugepage order: %lld\n"
-    "tlb hugepage assoc: %d\n"
-    "tlb hugepage page size: %lld\n\n",
+    "discrete tlb order: %lld\n"
+    "discrete tlb assoc: %d\n"
+    "discrete tlb default page size: %lld\n",
     
     pd->probe_shell,
     pd->n_fpga_chan,
@@ -330,12 +327,9 @@ ssize_t cyt_attr_cnfg_show(struct kobject *kobj, struct kobj_attribute *attr, ch
     pd->en_tcp,
     pd->en_avx,
     pd->en_wb,
-    pd->stlb_order->key_size,
-    pd->stlb_order->assoc,
-    pd->stlb_order->page_size,
-    pd->dtlb_order->key_size,
-    pd->dtlb_order->assoc,
-    pd->dtlb_order->page_size
+    pd->dtlb_order_default->key_size,
+    pd->dtlb_order_default->assoc,
+    pd->dtlb_order_default->page_info->page_size
   );
 }
 

@@ -329,6 +329,9 @@ extern char *config_fname;
 #define MAX_N_MAP_HUGE_PAGES 256
 #define MAX_SINGLE_DMA_SYNC 4 // pages
 
+/* TLB selection policy */
+#define AUTO_STLB_THRESHOLD 8
+
 /* Max card pages */
 #define MEM_START (256UL * 1024UL * 1024UL)
 #define MEM_START_CHUNKS (MEM_START / (4UL * 1024UL))
@@ -763,12 +766,18 @@ struct chunk {
 };
 
 
-/* TLB order */
-struct tlb_order {
-    bool hugepage;
+/* Page Information */
+struct page_info {
     uint64_t page_shift;
     uint64_t page_size;
     uint64_t page_mask;
+};
+
+
+/* TLB order */
+struct tlb_order {
+    bool hugepage;
+    struct page_info *page_info;
     int assoc;
     
     uint64_t key_mask;
@@ -829,6 +838,9 @@ struct fpga_dev {
     volatile uint64_t *fpga_dTlb; // discrete TLB (deafult in large page)
     volatile uint64_t *fpga_sTlb; // stream TLB (TODO, now discrete TLB in small page)
     volatile struct fpga_cnfg_regs *fpga_cnfg; // config
+
+    // TLB order
+    struct tlb_order *dtlb_order;
 
     // IRQ
     spinlock_t irq_lock; 
@@ -947,13 +959,16 @@ struct bus_drvdata {
     // Sysfs
     struct kobject cyt_kobj;
 
-    // TLB order
-    struct tlb_order *stlb_order;
-    struct tlb_order *dtlb_order;
+    // Page size information
+    struct page_info *normal_page_info;
+    struct page_info *huge_page_info;
     int32_t dif_order_page_shift;
     int32_t dif_order_page_size;
     int32_t dif_order_page_mask;
     int32_t n_pages_in_huge;
+
+    // TLB order
+    struct tlb_order *dtlb_order_default;
 
     // Locks
     spinlock_t stat_lock;

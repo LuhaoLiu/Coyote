@@ -164,7 +164,7 @@ int card_alloc(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
 
         for(i = 0; i < n_pages; i++) {
             pd->lalloc->used = true;
-            card_paddr[i] = (pd->lalloc->id << pd->stlb_order->page_shift) + pd->card_huge_offs;
+            card_paddr[i] = (pd->lalloc->id << pd->normal_page_info->page_shift) + pd->card_huge_offs;
             pd->lalloc = pd->lalloc->next;
         }
     } else {
@@ -175,7 +175,7 @@ int card_alloc(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
 
         for(i = 0; i < n_pages; i++) {
             pd->salloc->used = true;
-            card_paddr[i] = (pd->salloc->id << pd->stlb_order->page_shift) + pd->card_reg_offs;
+            card_paddr[i] = (pd->salloc->id << pd->normal_page_info->page_shift) + pd->card_reg_offs;
             pd->salloc = pd->salloc->next;
         }
     }
@@ -211,7 +211,7 @@ void card_free(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
 
     if(huge) {
         for(i = n_pages - 1; i >= 0; i--) {
-            tmp_id = (card_paddr[i] - pd->card_huge_offs) >> pd->stlb_order->page_shift;
+            tmp_id = (card_paddr[i] - pd->card_huge_offs) >> pd->normal_page_info->page_shift;
             if(pd->lchunks[tmp_id].used) {
                 pd->lchunks[tmp_id].next = pd->lalloc;
                 pd->lalloc = &pd->lchunks[tmp_id];
@@ -219,7 +219,7 @@ void card_free(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
         }
     } else {
         for(i = n_pages - 1; i >= 0; i--) {
-            tmp_id = (card_paddr[i] - pd->card_reg_offs) >> pd->stlb_order->page_shift;
+            tmp_id = (card_paddr[i] - pd->card_reg_offs) >> pd->normal_page_info->page_shift;
             if(pd->schunks[tmp_id].used) {
                 pd->schunks[tmp_id].next = pd->salloc;
                 pd->salloc = &pd->schunks[tmp_id];
@@ -246,39 +246,59 @@ void card_free(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
  */
 void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t paddr, int32_t host, int32_t cpid, pid_t hpid, int tlb_type)
 {
-    uint64_t key;
-    uint64_t tag;
-    uint64_t phys_addr;
     uint64_t entry [2];
 
     BUG_ON(!d);
 
-    if (tlb_type == 0) {
-        // TODO: NEW TLB
-        BUG();
-    } else if (tlb_type == 1) {
-        struct tlb_order *tlb_ord = d->pd->dtlb_order;
-        if (tlb_ord->hugepage != huge) BUG();
+    if (tlb_type == 1 && d->dtlb_order->hugepage == huge) {
+        // Discrete TLB
+        struct tlb_order *tlb_ord = d->dtlb_order;
+        struct page_info *page_info = d->dtlb_order->page_info;
 
-        key = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
-        tag = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
-        phys_addr = (paddr >> tlb_ord->page_shift) & tlb_ord->phy_mask;
+        uint64_t key = (vaddr >> (page_info->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
+        uint64_t tag = (vaddr >> (page_info->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
+        uint64_t phys_addr = (paddr >> page_info->page_shift) & tlb_ord->phy_mask;
 
         // new entry
-        entry[0] |= phys_addr | ((uint64_t)hpid << 32);
-        entry[1] |= key | (tag            << (tlb_ord->key_size)) 
-                        | ((uint64_t)cpid << (tlb_ord->key_size + tlb_ord->tag_size))
-                        | ((uint64_t)host << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE))
-                        | (1UL            << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
-                        // | (phys_addr      << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE + 1)); // no need for this
+        entry[0] = phys_addr | ((uint64_t)hpid << 32);
+        entry[1] = key | (tag            << (tlb_ord->key_size)) 
+                       | ((uint64_t)cpid << (tlb_ord->key_size + tlb_ord->tag_size))
+                       | ((uint64_t)host << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE))
+                       | (1UL            << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
+                       // | (phys_addr      << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE + 1)); // no need for this
 
-        dbg_info("creating new TLB entry, vaddr_fa %llx, paddr %llx, strm %d, cpid %d, hpid %d, hugepage %d\n", vaddr, paddr, host, cpid, hpid, tlb_ord->hugepage);
+        dbg_info("creating new dTLB entry, vaddr_fa %llx, paddr %llx, strm %d, cpid %d, hpid %d, hugepage %d\n", vaddr, paddr, host, cpid, hpid, huge);
 
         // map each page through AXIL
         d->fpga_dTlb[0] = entry[0];
         d->fpga_dTlb[1] = entry[1];
     } else {
-        BUG();
+        // Stream TLB
+        if (tlb_type != 0) {
+            pr_info("%s(): invalid TLB type %d, selecting stream TLB\n", __func__, tlb_type);
+        }
+        struct page_info *page_info = huge ? d->pd->huge_page_info : d->pd->normal_page_info;
+        
+        uint64_t phys_shift = TLB_PADDR_RANGE - page_info->page_shift;
+        uint64_t phys_mask = (1UL << phys_shift) - 1UL;
+        uint64_t virt_shift = TLB_VADDR_RANGE - page_info->page_shift;
+        uint64_t virt_mask = (1UL << virt_shift) - 1UL;
+
+        uint64_t phys_addr = (paddr >> page_info->page_shift) & phys_mask;
+        uint64_t virt_addr = (vaddr >> page_info->page_shift) & virt_mask;
+
+        // new entry
+        entry[0] = phys_addr | ((uint64_t)hpid         << (32));
+        entry[1] = virt_addr | ((uint64_t)cpid         << (36))                              // [36:41]
+                             | ((uint64_t)host         << (36 + PID_SIZE))                   // [42:43]
+                             | (1UL                    << (36 + PID_SIZE + STRM_SIZE))       // [43:43]
+                             | (page_info->page_shift  << (36 + PID_SIZE + STRM_SIZE + 1));  // [44:48]
+        
+        dbg_info("creating new sTLB entry, vaddr_fa %llx, paddr %llx, strm %d, cpid %d, hpid %d, hugepage %d\n", vaddr, paddr, host, cpid, hpid, huge);
+
+        // map each page through AXIL
+        d->fpga_sTlb[0] = entry[0];
+        d->fpga_sTlb[1] = entry[1];
     }
 }
 
@@ -288,93 +308,104 @@ void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t padd
  * @param vaddr - starting vaddr
  * @param cpid - Coyote PID
  * @param entry - list entry
- * @param tlb_type - TLB type (0: stream, 1: discrete)
+ * @param tlb_type - TLB type (0: stream, 1: discrete, 2: both)
  */
 void tlb_create_unmap(struct fpga_dev *d, uint64_t vaddr, bool huge, pid_t hpid, int tlb_type)
 {
-    uint64_t tag;
-    uint64_t key;
     uint64_t entry [2];
 
     BUG_ON(!d);
 
-    if (tlb_type == 0) {
-        // TODO: NEW TLB
-        BUG();
-    } else if (tlb_type == 1) {
-        struct tlb_order *tlb_ord = d->pd->dtlb_order;
-        if (tlb_ord->hugepage != huge) BUG();
+    if ((tlb_type == 2 || tlb_type == 1) && d->dtlb_order->hugepage == huge) {
+        // Discrete TLB
+        struct tlb_order *tlb_ord = d->dtlb_order;
+        struct page_info *page_info = d->dtlb_order->page_info;
 
-        key = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
-        tag = (vaddr >> (tlb_ord->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
-    
+        uint64_t key = (vaddr >> (page_info->page_shift - PAGE_SHIFT)) & tlb_ord->key_mask;
+        uint64_t tag = (vaddr >> (page_info->page_shift - PAGE_SHIFT)) >> tlb_ord->key_size;
+
         // entry host
-        entry[0] |= ((uint64_t)hpid << 32);
-        entry[1] |= key | (tag << (tlb_ord->key_size)) 
-                        | (0UL << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
-    
-        dbg_info("unmapping TLB entry, vaddr_fa %llx, hpid %d, hugepage %d\n", vaddr, hpid, tlb_ord->hugepage);
+        entry[0] = ((uint64_t)hpid << 32);
+        entry[1] = key | (tag << (tlb_ord->key_size)) 
+                       | (0UL << (tlb_ord->key_size + tlb_ord->tag_size + PID_SIZE + STRM_SIZE));
+        
+        dbg_info("unmapping dTLB entry, vaddr_fa %llx, hpid %d, hugepage %d\n", vaddr, hpid, tlb_ord->hugepage);
     
         // map each page through AXIL
         d->fpga_dTlb[0] = entry[0];
         d->fpga_dTlb[1] = entry[1];
-    } else {
-        BUG();
+    } 
+    if (tlb_type == 2 || tlb_type == 0) {
+        // Stream TLB
+        struct page_info *page_info = huge ? d->pd->huge_page_info : d->pd->normal_page_info;
+
+        uint64_t virt_shift = TLB_VADDR_RANGE - page_info->page_shift;
+        uint64_t virt_mask = (1UL << virt_shift) - 1UL;
+
+        uint64_t virt_addr = (vaddr >> page_info->page_shift) & virt_mask;
+
+        // entry host
+        entry[0] = ((uint64_t)hpid                     << (32));
+        entry[1] = virt_addr | (0UL                    << (36 + PID_SIZE + STRM_SIZE))      // [43:43]
+                             | (page_info->page_shift  << (36 + PID_SIZE + STRM_SIZE + 1)); // [44:48]
+        
+        dbg_info("unmapping sTLB entry, vaddr_fa %llx, hpid %d, hugepage %d\n", vaddr, hpid, huge);
+
+        // map each page through AXIL
+        d->fpga_sTlb[0] = entry[0];
+        d->fpga_sTlb[1] = entry[1];
     }
 }
 
 void update_dtlb_pgsize(struct fpga_dev *d, unsigned int pgsize)
 {
     uint64_t entry [2];
-    struct tlb_order *tlb_ord = d->pd->dtlb_order;
+    struct tlb_order *tlb_ord = d->dtlb_order;
 
     entry[0] = (uint64_t)pgsize;
     entry[1] = (1ULL << 63);
 
-    if (pgsize == 12) {
-        // 4K page
-        if (!tlb_ord->hugepage) {
-            // do nothing
-            dbg_info("hugepage already disabled, no update\n");
-        } else {
-            // notify hardware
-            d->fpga_dTlb[0] = entry[0];
-            d->fpga_dTlb[1] = entry[1];
-            // update structure
-            tlb_ord->hugepage = false;
-            tlb_ord->page_shift = pgsize;
-            tlb_ord->page_size = PAGE_SIZE;
-            tlb_ord->page_mask = PAGE_MASK;
-            tlb_ord->key_mask = (1UL << tlb_ord->key_size) - 1UL;
-            tlb_ord->tag_size = TLB_VADDR_RANGE - tlb_ord->page_shift - tlb_ord->key_size;
-            tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
-            tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_shift;
-            tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
-            dbg_info("set dtlb page size to %d\n", pgsize);
-        }
-    } else if (pgsize == 21) {
-        // 2M huge page
-        if (tlb_ord->hugepage) {
-            // do nothing
-            dbg_info("hugepage already enabled, no update\n");
-        } else {
-            // notify hardware
-            d->fpga_dTlb[0] = entry[0];
-            d->fpga_dTlb[1] = entry[1];
-            // update structure
-            tlb_ord->hugepage = true;
-            tlb_ord->page_shift = pgsize;
-            tlb_ord->page_size = 1UL << tlb_ord->page_shift;
-            tlb_ord->page_mask = (~(tlb_ord->page_size - 1));
-            tlb_ord->key_mask = (1UL << tlb_ord->key_size) - 1UL;
-            tlb_ord->tag_size = TLB_VADDR_RANGE - tlb_ord->page_shift - tlb_ord->key_size;
-            tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
-            tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_shift;
-            tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
-            dbg_info("set dtlb page size to %d\n", pgsize);
-        }
-    } else {
-        BUG();
+    switch (pgsize) {
+        case PAGE_SHIFT:
+            if (!tlb_ord->hugepage) {
+                // do nothing
+                dbg_info("hugepage already disabled, no update\n");
+            } else {
+                // notify hardware
+                d->fpga_dTlb[0] = entry[0];
+                d->fpga_dTlb[1] = entry[1];
+                // update structure
+                tlb_ord->hugepage = false;
+                tlb_ord->page_info = d->pd->normal_page_info;
+                tlb_ord->key_mask = (1UL << tlb_ord->key_size) - 1UL;
+                tlb_ord->tag_size = TLB_VADDR_RANGE - tlb_ord->page_info->page_shift - tlb_ord->key_size;
+                tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
+                tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_info->page_shift;
+                tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
+                dbg_info("set dtlb page size to %d\n", pgsize);
+            }
+            break;
+        case HPAGE_SHIFT:
+            if (tlb_ord->hugepage) {
+                // do nothing
+                dbg_info("hugepage already enabled, no update\n");
+            } else {
+                // notify hardware
+                d->fpga_dTlb[0] = entry[0];
+                d->fpga_dTlb[1] = entry[1];
+                // update structure
+                tlb_ord->hugepage = true;
+                tlb_ord->page_info = d->pd->huge_page_info;
+                tlb_ord->key_mask = (1UL << tlb_ord->key_size) - 1UL;
+                tlb_ord->tag_size = TLB_VADDR_RANGE - tlb_ord->page_info->page_shift - tlb_ord->key_size;
+                tlb_ord->tag_mask = (1UL << tlb_ord->tag_size) - 1UL;
+                tlb_ord->phy_size = TLB_PADDR_RANGE - tlb_ord->page_info->page_shift;
+                tlb_ord->phy_mask = (1UL << tlb_ord->phy_size) - 1UL;
+                dbg_info("set dtlb page size to %d\n", pgsize);
+            }
+            break;
+        default:
+            BUG();
     }
 }
 
@@ -397,7 +428,7 @@ void dma_offload_start(struct fpga_dev *d, uint64_t *host_address, uint64_t *car
     BUG_ON(!pd);
 
     pg_inc = huge ? MAX_SINGLE_DMA_SYNC : 1;
-    len = huge ? (MAX_SINGLE_DMA_SYNC * PAGE_SIZE) : pd->stlb_order->page_size;
+    len = huge ? (MAX_SINGLE_DMA_SYNC * PAGE_SIZE) : pd->normal_page_info->page_size;
 
     for(i = 0; i < n_pages; i+=pg_inc) {
         if(host_address[i] == 0 || card_address[i] == 0)
@@ -437,7 +468,7 @@ void dma_sync_start(struct fpga_dev *d, uint64_t *host_address, uint64_t *card_a
     BUG_ON(!pd);
 
     pg_inc = huge ? MAX_SINGLE_DMA_SYNC : 1;
-    len = huge ? (MAX_SINGLE_DMA_SYNC * PAGE_SIZE) : pd->stlb_order->page_size;
+    len = huge ? (MAX_SINGLE_DMA_SYNC * PAGE_SIZE) : pd->normal_page_info->page_size;
 
     for(i = 0; i < n_pages; i+=pg_inc) {
         while(cmd_sent >= DMA_THRSH) {

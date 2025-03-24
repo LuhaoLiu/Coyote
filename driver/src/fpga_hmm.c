@@ -61,7 +61,7 @@ int mmu_handler_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cp
     uint64_t first, last;
     uint64_t n_pages;
     struct bus_drvdata *pd = d->pd;
-    struct tlb_order *tlb_order;
+    struct page_info *page_info;
     struct cyt_migrate *args;
 
     args = kzalloc(sizeof(*args), GFP_KERNEL);
@@ -86,12 +86,12 @@ int mmu_handler_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cp
     mmap_read_lock(curr_mm);
 
     // hugepages?
-    tlb_order = hugepages ? pd->dtlb_order : pd->stlb_order;
+    page_info = hugepages ? pd->huge_page_info : pd->normal_page_info;
     dbg_info("passed region thp %d\n", hugepages);
 
     // number of pages (huge or regular)
-    first = (vaddr & tlb_order->page_mask) >> PAGE_SHIFT;
-    last = ((vaddr + len - 1) & tlb_order->page_mask) >> PAGE_SHIFT;
+    first = (vaddr & page_info->page_mask) >> PAGE_SHIFT;
+    last = ((vaddr + len - 1) & page_info->page_mask) >> PAGE_SHIFT;
     n_pages = last - first + 1;
     if (hugepages)
         n_pages = n_pages * pd->n_pages_in_huge;
@@ -152,9 +152,9 @@ bool cyt_interval_invalidate(struct mmu_interval_notifier *interval_sub, const s
     struct vm_area_struct *vma = range->vma;
     bool huge = is_thp(vma, range->start, NULL);
     struct bus_drvdata *pd = d->pd;
-    struct tlb_order *order = huge ? pd->dtlb_order : pd->stlb_order;
-    uint64_t start = range->start & order->page_mask;
-    uint64_t end = (range->end + order->page_size - 1) & order->page_mask;
+    struct page_info *page_info = huge ? pd->huge_page_info : pd->normal_page_info;
+    uint64_t start = range->start & page_info->page_mask;
+    uint64_t end = (range->end + page_info->page_size - 1) & page_info->page_mask;
     uint64_t first, last;
     uint32_t n_pages;
     pid_t hpid = p->hpid;
@@ -368,9 +368,9 @@ vm_fault_t cpu_migrate_to_host(struct vm_fault *vmf)
     bool hugepages = zone_data->huge;
     struct fpga_dev *d = vmf->page->pgmap->owner;
     struct bus_drvdata *pd = d->pd;
-    struct tlb_order *order = hugepages ? pd->dtlb_order : pd->stlb_order;
-    uint64_t start = vmf->address & order->page_mask;
-    uint64_t end = start + order->page_size;
+    struct page_info *page_info = hugepages ? pd->huge_page_info : pd->normal_page_info;
+    uint64_t start = vmf->address & page_info->page_mask;
+    uint64_t end = start + page_info->page_size;
     uint32_t n_pages = hugepages ? pd->n_pages_in_huge : 1;
     vm_fault_t ret = 0;
     int i = 0, j;
@@ -1165,9 +1165,12 @@ void tlb_map_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t *paddr, uint32_t n
     uint32_t pg_inc;
     uint32_t n_map_pages;
     uint64_t tmp_vaddr;
+    int tlb_type;
 
     pg_inc = huge ? pd->n_pages_in_huge : 1;
     n_map_pages = huge ? n_pages >> pd->dif_order_page_shift : n_pages;
+
+    tlb_type = n_pages >= AUTO_STLB_THRESHOLD ? 0 : 1;
 
     // fill mappings
     tmp_vaddr = vaddr;
@@ -1175,7 +1178,7 @@ void tlb_map_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t *paddr, uint32_t n
         if(paddr[i] == 0)
             continue;
         
-        tlb_create_map(d, huge ? pd->dtlb_order : pd->stlb_order, tmp_vaddr, paddr[i], host, cpid, hpid);
+        tlb_create_map(d, tmp_vaddr, huge, paddr[i], host, cpid, hpid, tlb_type);
         
         tmp_vaddr += pg_inc;
     }
@@ -1202,7 +1205,7 @@ void tlb_unmap_hmm(struct fpga_dev *d, uint64_t vaddr, uint32_t n_pages, pid_t h
 
     tmp_vaddr = vaddr;
     for (i = 0; i < n_map_pages; i+=pg_inc) {
-        tlb_create_unmap(d, huge ? pd->dtlb_order : pd->stlb_order, tmp_vaddr, hpid);
+        tlb_create_unmap(d, tmp_vaddr, huge, hpid, 2);
         
         tmp_vaddr += pg_inc;
     }

@@ -345,10 +345,10 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 #ifdef HMM_KERNEL
             if(en_hmm) 
-                ret_val = mmu_handler_hmm(d, tmp[0], tmp[1], cpid, true, hpid);
+                ret_val = mmu_handler_hmm(d, tmp[0], tmp[1], cpid, true, hpid, -1);
             else
 #endif            
-                ret_val = mmu_handler_gup(d, tmp[0], tmp[1], cpid, true, hpid);
+                ret_val = mmu_handler_gup(d, tmp[0], tmp[1], cpid, true, hpid, -1);
             
             if(ret_val) {
                 pr_info("buffer could not be mapped, ret_val: %d\n", ret_val);

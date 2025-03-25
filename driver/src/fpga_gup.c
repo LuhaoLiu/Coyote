@@ -47,8 +47,9 @@ struct hlist_head user_buff_map[MAX_N_REGIONS][N_CPID_MAX][1 << (USER_HASH_TABLE
  * @param d - vFPGA
  * @param pf - read page fault
  * @param hpid - host pid
+ * @param tlb_type - TLB type (-1: auto, 0: stream, 1: discrete)
  */
-int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cpid, int32_t stream, pid_t hpid)
+int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cpid, int32_t stream, pid_t hpid, int tlb_type)
 {
     int ret_val = 0;
     struct user_pages *user_pg;
@@ -90,24 +91,24 @@ int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cp
         if(stream == HOST_ACCESS) {
             if(user_pg->host == HOST_ACCESS) {
                 dbg_info("host access, map present, updating TLB\n");
-                tlb_map_gup(d, &pfa, user_pg, hpid);
+                tlb_map_gup(d, &pfa, user_pg, hpid, tlb_type);
             } else {
                 dbg_info("card access, map present, migration\n");
-                tlb_unmap_gup(d, user_pg, hpid);
+                tlb_unmap_gup(d, user_pg, hpid, tlb_type);
                 user_pg->host = HOST_ACCESS;
                 migrate_to_host_gup(d, user_pg);
-                tlb_map_gup(d, &pfa, user_pg, hpid);
+                tlb_map_gup(d, &pfa, user_pg, hpid, tlb_type);
             }
         } else if(stream == CARD_ACCESS) {
             if(user_pg->host == HOST_ACCESS) {
                 dbg_info("host access, map present, migration\n");
-                tlb_unmap_gup(d, user_pg, hpid);
+                tlb_unmap_gup(d, user_pg, hpid, tlb_type);
                 user_pg->host = CARD_ACCESS;
                 migrate_to_card_gup(d, user_pg);
-                tlb_map_gup(d, &pfa, user_pg, hpid);
+                tlb_map_gup(d, &pfa, user_pg, hpid, tlb_type);
             } else {
                 dbg_info("card access, map present, updating TLB\n");
-                tlb_map_gup(d, &pfa, user_pg, hpid);
+                tlb_map_gup(d, &pfa, user_pg, hpid, tlb_type);
             }
         } else {
             ret_val = -EINVAL;
@@ -122,11 +123,11 @@ int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cp
         }
 
        if(stream) {  
-           tlb_map_gup(d, &pfa, user_pg, hpid);           
+           tlb_map_gup(d, &pfa, user_pg, hpid, tlb_type);           
        } else {
            user_pg->host = CARD_ACCESS;
            migrate_to_card_gup(d, user_pg);
-           tlb_map_gup(d, &pfa, user_pg, hpid);
+           tlb_map_gup(d, &pfa, user_pg, hpid, tlb_type);
        }
     }
 
@@ -169,8 +170,9 @@ struct user_pages* map_present(struct fpga_dev *d, struct desc_aligned *pfa)
  * @param pfa - aligned read page fault
  * @param user_pg - mapping
  * @param hpid - host pid
+ * @param tlb_type - TLB type (-1:auto, 0: stream, 1: discrete)
 */
-void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages *user_pg, pid_t hpid) 
+void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages *user_pg, pid_t hpid, int tlb_type) 
 {
     int i;
     // int j;
@@ -180,7 +182,7 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
     uint64_t vaddr_tmp;
     // uint64_t paddr_tmp, paddr_curr;
     // bool is_huge;
-    int tlb_type;
+    int tlb_type_internal;
     int32_t n_pg_mapped = 0;
     struct bus_drvdata *pd = d->pd;
 
@@ -189,7 +191,12 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
     pg_offs = first_pfa - first_user;
     n_pages = pfa->n_pages;
 
-    tlb_type = n_pages >= AUTO_STLB_THRESHOLD ? 0 : 1;
+    if (tlb_type == -1) {
+        // TLB auto selection policy
+        tlb_type_internal = n_pages >= AUTO_STLB_THRESHOLD ? 0 : 1;
+    } else {
+        tlb_type_internal = tlb_type;
+    }
 
     vaddr_tmp = first_pfa;
 
@@ -198,7 +205,7 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
         for (i = 0; (i < n_pages) && (n_pg_mapped < MAX_N_MAP_PAGES); i+=pd->n_pages_in_huge) {
             tlb_create_map(d, vaddr_tmp, true,
                 (user_pg->host == HOST_ACCESS) ? user_pg->hpages[i + pg_offs] : user_pg->cpages[i + pg_offs],
-                user_pg->host, user_pg->cpid, hpid, tlb_type);
+                user_pg->host, user_pg->cpid, hpid, tlb_type_internal);
 
             vaddr_tmp += pd->n_pages_in_huge;
             n_pg_mapped++;
@@ -241,7 +248,7 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
         for (i = 0; (i < n_pages) && (n_pg_mapped < MAX_N_MAP_PAGES); ++i) {
             tlb_create_map(d, vaddr_tmp, false,
                 (user_pg->host == HOST_ACCESS) ? user_pg->hpages[i + pg_offs] : user_pg->cpages[i + pg_offs],
-                user_pg->host, user_pg->cpid, hpid, tlb_type);
+                user_pg->host, user_pg->cpid, hpid, tlb_type_internal);
 
             vaddr_tmp += 1;
             n_pg_mapped++;
@@ -255,8 +262,9 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
  * @param d - vFPGA
  * @param user_pg - mapping
  * @param hpid - host pid
+ * @param tlb_type - TLB type (-1:auto, 0: stream, 1: discrete)
 */
-void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid) 
+void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid, int tlb_type) 
 {
     int i;
     // int j;
@@ -264,6 +272,7 @@ void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid)
     uint64_t vaddr_tmp;
     // uint64_t paddr_tmp, paddr_curr;
     // bool is_huge;
+    int tlb_type_internal;
     int32_t pg_inc;
     struct bus_drvdata *pd = d->pd;
 
@@ -272,12 +281,19 @@ void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid)
 
     vaddr_tmp = user_pg->vaddr;
 
+    if (tlb_type == -1) {
+        // TLB auto selection policy
+        // we cannot assure that the page is in a certain type of TLB
+        // so we unmap it from both TLBs (tlb_type_internal == 2)
+        tlb_type_internal = 2;
+    } else {
+        tlb_type_internal = tlb_type;
+    }
+
     if(user_pg->huge) {
         // unmap - huge
         for (i = 0; i < n_pages; i+=pd->n_pages_in_huge) {
-            // we cannot assure that the page is in a certain type of TLB
-            // so we unmap it from both TLBs (tlb_type == 2)
-            tlb_create_unmap(d, vaddr_tmp, true, hpid, 2);
+            tlb_create_unmap(d, vaddr_tmp, true, hpid, tlb_type_internal);
             
             vaddr_tmp += pd->n_pages_in_huge;
         }
@@ -314,9 +330,7 @@ void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid)
         //     i += is_huge ? pd->n_pages_in_huge : 1;
         // }
         for (i = 0; i < n_pages; ++i) {
-            // we cannot assure that the page is in a certain type of TLB
-            // so we unmap it from both TLBs (tlb_type == 2)
-            tlb_create_unmap(d, vaddr_tmp, true, hpid, 2); 
+            tlb_create_unmap(d, vaddr_tmp, true, hpid, tlb_type_internal); 
             
             vaddr_tmp += 1;
         }
@@ -384,10 +398,10 @@ int offload_user_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t size, int32_t 
                 pfa.hugepages = tmp_entry->huge;
                 
                 dbg_info("user triggered migration to card, vaddr %llx, cpid %d, last %llx\n", vaddr_tmp, cpid, vaddr_last);
-                tlb_unmap_gup(d, tmp_entry, hpid);
+                tlb_unmap_gup(d, tmp_entry, hpid, -1);
                 tmp_entry->host = CARD_ACCESS;
                 migrate_to_card_gup(d, tmp_entry);
-                tlb_map_gup(d, &pfa, tmp_entry, hpid);
+                tlb_map_gup(d, &pfa, tmp_entry, hpid, -1);
                 ret_val = 0;
 
                 vaddr_tmp += tmp_entry->n_pages;
@@ -451,10 +465,10 @@ int sync_user_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t size, int32_t cpi
                 pfa.hugepages = tmp_entry->huge;
                 
                 dbg_info("user triggered migration to host, vaddr %llx, cpid %d, last %llx\n", vaddr_tmp, cpid, vaddr_last);
-                tlb_unmap_gup(d, tmp_entry, hpid);
+                tlb_unmap_gup(d, tmp_entry, hpid, -1);
                 tmp_entry->host = HOST_ACCESS;
                 migrate_to_host_gup(d, tmp_entry);
-                tlb_map_gup(d, &pfa, tmp_entry, hpid);
+                tlb_map_gup(d, &pfa, tmp_entry, hpid, -1);
                 ret_val = 0;
 
                 vaddr_tmp += tmp_entry->n_pages;
@@ -599,7 +613,7 @@ int tlb_put_user_pages(struct fpga_dev *d, uint64_t vaddr, int32_t cpid, pid_t h
     hash_for_each_possible(user_buff_map[d->id][cpid], tmp_entry, entry, vaddr_tmp) {
         if(vaddr_tmp >= tmp_entry->vaddr && vaddr_tmp <= tmp_entry->vaddr + tmp_entry->n_pages) {
             // unmap from TLB
-            tlb_unmap_gup(d, tmp_entry, hpid);
+            tlb_unmap_gup(d, tmp_entry, hpid, -1);
 
             // release card pages
             if(pd->en_mem) {
@@ -664,7 +678,7 @@ int tlb_put_user_pages_cpid(struct fpga_dev *d, int32_t cpid, pid_t hpid, int di
 
     hash_for_each(user_buff_map[d->id][cpid], bkt, tmp_entry, entry) {
         // unmap from TLB
-        tlb_unmap_gup(d, tmp_entry, hpid);
+        tlb_unmap_gup(d, tmp_entry, hpid, -1);
         
         // release card pages
         if(pd->en_mem) {
@@ -741,7 +755,7 @@ void p2p_move_notify(struct dma_buf_attachment *attach)
     hash_for_each_possible(user_buff_map[d->id][cpid], tmp_entry, entry, vaddr_tmp) {
         if(vaddr_tmp >= tmp_entry->vaddr && vaddr_tmp <= tmp_entry->vaddr + tmp_entry->n_pages) {
             // unmap from TLB
-            tlb_unmap_gup(d, tmp_entry, hpid);
+            tlb_unmap_gup(d, tmp_entry, hpid, -1);
 
             // unmap buffer from vFPGA bus address space
             dma_buf_unmap_attachment(tmp_entry->dma_attach, tmp_entry->sgt, DMA_BIDIRECTIONAL);
@@ -770,7 +784,7 @@ void p2p_move_notify(struct dma_buf_attachment *attach)
             pfa.cpid = cpid;
             pfa.hugepages = false;
 
-            tlb_map_gup(d, &pfa, tmp_entry, hpid);
+            tlb_map_gup(d, &pfa, tmp_entry, hpid, -1);
 
             tmp_entry->buf = attach->dmabuf;
             tmp_entry->dma_attach = attach;
@@ -891,7 +905,7 @@ int p2p_attach_dma_buf(struct fpga_dev *d, int buf_fd, uint64_t vaddr, int32_t c
     pfa.cpid = cpid;
     pfa.hugepages = false;
 
-    tlb_map_gup(d, &pfa, user_pg, hpid);
+    tlb_map_gup(d, &pfa, user_pg, hpid, -1);
 
     dbg_info("dmabuf attached, n_pages %d\n", n_pages);
     return 0;
@@ -937,7 +951,7 @@ int p2p_detach_dma_buf(struct fpga_dev *d, uint64_t vaddr, int32_t cpid, int dir
     hash_for_each_possible(user_buff_map[d->id][cpid], tmp_entry, entry, vaddr_tmp) {
         if(vaddr_tmp >= tmp_entry->vaddr && vaddr_tmp <= tmp_entry->vaddr + tmp_entry->n_pages) {
             // unmap from TLB
-            tlb_unmap_gup(d, tmp_entry, hpid);
+            tlb_unmap_gup(d, tmp_entry, hpid, -1);
             
 
             // release card pages

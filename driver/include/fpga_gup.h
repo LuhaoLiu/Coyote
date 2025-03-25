@@ -41,12 +41,12 @@
 */
 
 /* MMU */
-int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cpid, int32_t stream, pid_t hpid);
+int mmu_handler_gup(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cpid, int32_t stream, pid_t hpid, int tlb_type);
 
 /* Mapping */
 struct user_pages* map_present(struct fpga_dev *d, struct desc_aligned *pfa);
-void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages *user_pg, pid_t hpid);
-void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid);
+void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages *user_pg, pid_t hpid, int tlb_type);
+void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid, int tlb_type);
 
 /* PTW */
 struct user_pages* tlb_get_user_pages(struct fpga_dev *d, struct desc_aligned *pfa, pid_t hpid, struct task_struct *curr_task, struct mm_struct *curr_mm);

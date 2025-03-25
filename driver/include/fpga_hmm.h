@@ -43,23 +43,23 @@
 #ifdef HMM_KERNEL
 
 /* MMU */
-int mmu_handler_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cpid, int32_t stream, pid_t hpid);
+int mmu_handler_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t len, int32_t cpid, int32_t stream, pid_t hpid, int tlb_type);
 
 /* Invalidations */
 bool cyt_interval_invalidate(struct mmu_interval_notifier *interval_sub, const struct mmu_notifier_range *range, unsigned long cur_seq);
 
 /* Migrations */
-int user_migrate_to_card(struct fpga_dev *d, struct cyt_migrate *args);
-int user_migrate_to_host(struct fpga_dev *d, struct cyt_migrate *args);
-int fpga_migrate_to_host(struct fpga_dev *d, struct cyt_migrate *args);
-int fpga_migrate_to_card(struct fpga_dev *d, struct cyt_migrate *args);
+int user_migrate_to_card(struct fpga_dev *d, struct cyt_migrate *args, int tlb_type);
+int user_migrate_to_host(struct fpga_dev *d, struct cyt_migrate *args, int tlb_type);
+int fpga_migrate_to_host(struct fpga_dev *d, struct cyt_migrate *args, int tlb_type);
+int fpga_migrate_to_card(struct fpga_dev *d, struct cyt_migrate *args, int tlb_type);
 struct page *host_ptw(uint64_t vaddr, pid_t hpid);
 vm_fault_t cpu_migrate_to_host(struct vm_fault *vmf);
 int fpga_do_host_fault(struct fpga_dev *d, struct cyt_migrate *args); // not really needed ...
 
 /* Mapping */
-void tlb_map_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t *paddr, uint32_t n_pages, int32_t host, int32_t cpid, pid_t hpid, bool huge); 
-void tlb_unmap_hmm(struct fpga_dev *d, uint64_t vaddr, uint32_t n_pages, pid_t hpid, bool huge);
+void tlb_map_hmm(struct fpga_dev *d, uint64_t vaddr, uint64_t *paddr, uint32_t n_pages, int32_t host, int32_t cpid, pid_t hpid, bool huge, int tlb_type); 
+void tlb_unmap_hmm(struct fpga_dev *d, uint64_t vaddr, uint32_t n_pages, pid_t hpid, bool huge, int tlb_type);
 
 /* Private pages */
 void free_card_mem(struct fpga_dev *d, int cpid);

@@ -196,10 +196,10 @@ void fpga_pfault_handler(struct work_struct *work)
 
 #ifdef HMM_KERNEL
     if(en_hmm)
-        ret_val = mmu_handler_hmm(d, irq_pf->vaddr, irq_pf->len, irq_pf->cpid, irq_pf->stream, hpid);
+        ret_val = mmu_handler_hmm(d, irq_pf->vaddr, irq_pf->len, irq_pf->cpid, irq_pf->stream, hpid, -1);
     else
 #endif    
-        ret_val = mmu_handler_gup(d, irq_pf->vaddr, irq_pf->len, irq_pf->cpid, irq_pf->stream, hpid);
+        ret_val = mmu_handler_gup(d, irq_pf->vaddr, irq_pf->len, irq_pf->cpid, irq_pf->stream, hpid, -1);
 
     if (ret_val) {
         fpga_drop_irq_pfault(d, irq_pf->wr, irq_pf->cpid);

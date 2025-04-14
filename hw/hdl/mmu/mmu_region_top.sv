@@ -173,11 +173,10 @@ assign dTlb.valid = mutex[1] ? wr_dTlb.valid : rd_dTlb.valid;
 assign sTlb.valid = mutex[1] ? wr_sTlb.valid : rd_sTlb.valid;
 
 // TLBs
-tlb_controller #(
+dtlb_controller #(
     .TLB_ORDER(TLB_L_ORDER),
     .DEF_PG_BITS(PG_L_BITS),
     .N_ASSOC(N_L_ASSOC),
-    .DBG_L(1),
     .ID_REG(ID_REG)
 ) inst_dTlb (
     .aclk(aclk),
@@ -187,11 +186,8 @@ tlb_controller #(
     .TLB(dTlb)
 );
 
-tlb_controller #(
-    .TLB_ORDER(TLB_S_ORDER),
-    .DEF_PG_BITS(PG_S_BITS),
+stlb_controller #(
     .N_ASSOC(N_S_ASSOC),
-    .DBG_S(1),
     .ID_REG(ID_REG)
 ) inst_sTlb (
     .aclk(aclk),

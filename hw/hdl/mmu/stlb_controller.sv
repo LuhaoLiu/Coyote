@@ -98,9 +98,10 @@ logic [VADDR_BITS-1:0] tlb_addr_s, tlb_addr_l, tlb_addr_h;
 logic [N_ASSOC-1:0][VIR_BITS-1:0]   vaddr_diff_upd;
 logic [N_ASSOC-1:0][VIR_BITS-1:0]   vaddr_diff_lup;
 
-logic hit_modify_upd, hit_append_upd;
+logic hit_modify_upd, hit_append_upd, hit_delete_upd;
 logic [TLB_IDX_BITS-1:0] hit_idx_modify_upd, hit_idx_modify_upd_saved;
 logic [TLB_IDX_BITS-1:0] hit_idx_append_upd, hit_idx_append_upd_saved;
+logic [TLB_IDX_BITS-1:0] hit_idx_delete_upd, hit_idx_delete_upd_saved;
 
 logic [N_ASSOC_BITS-1:0] entry_insert_fe, entry_insert_se;
 logic [7:0] min_ref_cnt;
@@ -224,7 +225,7 @@ always_ff @(posedge aclk) begin
     end else if (state_C == ST_APPEND_PT) begin
       entry_valid_sz[hit_idx_append_upd] <= entry_valid_sz[hit_idx_append_upd] + 1;
     end else if (state_C == ST_DEL_ENTRY) begin
-      entry_valid_sz[hit_idx_modify_upd] <= 0;
+      entry_valid_sz[hit_idx_delete_upd] <= 0;
     end
   end
 end
@@ -267,7 +268,7 @@ always_comb begin
         state_N = ST_APPEND_PT;
       end else if (data_C_valid) begin
         state_N = ST_NEW_ENTRY;
-      end else if (hit_modify_upd) begin
+      end else if (hit_delete_upd) begin
         state_N = ST_DEL_ENTRY;
       end else begin
         state_N = ST_IDLE;
@@ -352,33 +353,47 @@ always_ff @(posedge aclk) begin
   if (aresetn == 1'b0) begin
     hit_idx_append_upd_saved <= 0;
     hit_idx_modify_upd_saved <= 0;
+    hit_idx_delete_upd_saved <= 0;
   end else begin
     hit_idx_append_upd_saved <= hit_idx_append_upd;
     hit_idx_modify_upd_saved <= hit_idx_modify_upd;
+    hit_idx_delete_upd_saved <= hit_idx_delete_upd;
   end
 end
 
 always_comb begin
   hit_modify_upd = 0;
   hit_append_upd = 0;
+  hit_delete_upd = 0;
   hit_idx_modify_upd = 0;
   hit_idx_append_upd = 0;
+  hit_idx_delete_upd = 0;
 
   for (int i = 0; i < N_ASSOC; i++) begin
     if (
       vaddr_diff_upd[i] <= entry_valid_sz[i] && data_C_vaddr >= entry_vaddr[i] && // vaddr match
-      data_C_pid == entry_pid[i] && // pid match
-      data_C_strm == entry_strm[i] && // strm match
       data_C_pg_bits == entry_pg_bits[i] // pg_bits match
     ) begin
+      if (
+        data_C_pid == entry_pid[i] && // pid match
+        data_C_strm == entry_strm[i]  // strm match
+      ) begin
+        // full hit: new tlb
+        if (vaddr_diff_upd[i] < entry_valid_sz[i]) begin
+          // within the valid range
+          hit_modify_upd = 1;
+          hit_idx_modify_upd = i;
+        end else if (entry_valid_sz[i] != ~0) begin
+          // out of valid range by 1: append
+          hit_append_upd = 1;
+          hit_idx_append_upd = i;
+        end
+      end
+      // partial hit: delete tlb
       if (vaddr_diff_upd[i] < entry_valid_sz[i]) begin
         // within the valid range
-        hit_modify_upd = 1;
-        hit_idx_modify_upd = i;
-      end else if (entry_valid_sz[i] != ~0) begin
-        // out of valid range by 1: append
-        hit_append_upd = 1;
-        hit_idx_append_upd = i;
+        hit_delete_upd = 1;
+        hit_idx_delete_upd = i;
       end
     end
   end
@@ -429,7 +444,7 @@ always_comb begin
   entry_insert_fe = 0;
 
   for(int i = 0; i < N_ASSOC; i++) begin
-    if (entry_valid_sz == 0) begin
+    if (entry_valid_sz[i] == 0) begin
       filled = 1'b0;
       entry_insert_fe = i;
       break;

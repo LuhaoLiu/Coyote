@@ -330,7 +330,7 @@ void tlb_unmap_gup(struct fpga_dev *d, struct user_pages *user_pg, pid_t hpid, i
         //     i += is_huge ? pd->n_pages_in_huge : 1;
         // }
         for (i = 0; i < n_pages; ++i) {
-            tlb_create_unmap(d, vaddr_tmp, true, hpid, tlb_type_internal); 
+            tlb_create_unmap(d, vaddr_tmp, false, hpid, tlb_type_internal); 
             
             vaddr_tmp += 1;
         }

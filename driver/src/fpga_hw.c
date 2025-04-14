@@ -285,7 +285,7 @@ void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t padd
         uint64_t virt_mask = (1UL << virt_shift) - 1UL;
 
         uint64_t phys_addr = (paddr >> page_info->page_shift) & phys_mask;
-        uint64_t virt_addr = (vaddr >> page_info->page_shift) & virt_mask;
+        uint64_t virt_addr = (vaddr >> (page_info->page_shift - PAGE_SHIFT)) & virt_mask;
 
         // new entry
         entry[0] = phys_addr | ((uint64_t)hpid         << (32));
@@ -342,7 +342,7 @@ void tlb_create_unmap(struct fpga_dev *d, uint64_t vaddr, bool huge, pid_t hpid,
         uint64_t virt_shift = TLB_VADDR_RANGE - page_info->page_shift;
         uint64_t virt_mask = (1UL << virt_shift) - 1UL;
 
-        uint64_t virt_addr = (vaddr >> page_info->page_shift) & virt_mask;
+        uint64_t virt_addr = (vaddr >> (page_info->page_shift - PAGE_SHIFT)) & virt_mask;
 
         // entry host
         entry[0] = ((uint64_t)hpid                     << (32));

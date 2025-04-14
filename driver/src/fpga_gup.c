@@ -189,11 +189,11 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
     first_pfa = pfa->vaddr;
     first_user = user_pg->vaddr;
     pg_offs = first_pfa - first_user;
-    n_pages = pfa->n_pages;
+    n_pages = pfa->n_pages; // number of 4K pages
 
     if (tlb_type == -1) {
         // TLB auto selection policy
-        tlb_type_internal = n_pages >= AUTO_STLB_THRESHOLD ? 0 : 1;
+        tlb_type_internal = (user_pg->huge ? n_pages / pd->n_pages_in_huge : n_pages) >= AUTO_STLB_THRESHOLD ? 0 : 1;
     } else {
         tlb_type_internal = tlb_type;
     }

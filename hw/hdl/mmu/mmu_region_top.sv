@@ -94,23 +94,15 @@ module mmu_region_top #(
 
 // -- Decl -----------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
-localparam integer PG_L_SIZE = 1 << PG_L_BITS;
-localparam integer PG_S_SIZE = 1 << PG_S_BITS;
-localparam integer HASH_L_BITS = TLB_L_ORDER;
-localparam integer HASH_S_BITS = TLB_S_ORDER;
-localparam integer PHY_L_BITS = PADDR_BITS - PG_L_BITS;
-localparam integer PHY_S_BITS = PADDR_BITS - PG_S_BITS;
-localparam integer TAG_L_BITS = VADDR_BITS - HASH_L_BITS - PG_L_BITS;
-localparam integer TAG_S_BITS = VADDR_BITS - HASH_S_BITS - PG_S_BITS;
-localparam integer TLB_L_DATA_BITS = TAG_L_BITS + PID_BITS + 2 + PHY_L_BITS + HPID_BITS;
-localparam integer TLB_S_DATA_BITS = TAG_S_BITS + PID_BITS + 2 + PHY_S_BITS + HPID_BITS;
+localparam integer TLB_D_DATA_BITS = TLB_DATA_BITS;
+localparam integer TLB_S_DATA_BITS = TLB_D_DATA_BITS;
 
 // Tlb interfaces
-tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) rd_dTlb ();
+tlbIntf #(.TLB_INTF_DATA_BITS(TLB_D_DATA_BITS)) rd_dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) rd_sTlb ();
-tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) wr_dTlb ();
+tlbIntf #(.TLB_INTF_DATA_BITS(TLB_D_DATA_BITS)) wr_dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) wr_sTlb ();
-tlbIntf #(.TLB_INTF_DATA_BITS(TLB_L_DATA_BITS)) dTlb ();
+tlbIntf #(.TLB_INTF_DATA_BITS(TLB_D_DATA_BITS)) dTlb ();
 tlbIntf #(.TLB_INTF_DATA_BITS(TLB_S_DATA_BITS)) sTlb ();
 
 logic [4:0] dTlb_pg_bits;
@@ -174,9 +166,9 @@ assign sTlb.valid = mutex[1] ? wr_sTlb.valid : rd_sTlb.valid;
 
 // TLBs
 dtlb_controller #(
-    .TLB_ORDER(TLB_L_ORDER),
+    .TLB_ORDER(TLB_D_ORDER),
+    .N_ASSOC(N_D_ASSOC),
     .DEF_PG_BITS(PG_L_BITS),
-    .N_ASSOC(N_L_ASSOC),
     .ID_REG(ID_REG)
 ) inst_dTlb (
     .aclk(aclk),
@@ -187,6 +179,7 @@ dtlb_controller #(
 );
 
 stlb_controller #(
+    .TLB_ORDER(TLB_S_ORDER),
     .N_ASSOC(N_S_ASSOC),
     .ID_REG(ID_REG)
 ) inst_sTlb (
@@ -199,9 +192,7 @@ stlb_controller #(
 
 // TLB slaves
 tlb_slave_axil #(
-    // .TLB_ORDER(TLB_L_ORDER),
-    // .PG_BITS(PG_L_BITS),
-    // .N_ASSOC(N_L_ASSOC)
+    // Nothing
 ) inst_dTlb_slv_0 (
     .aclk(aclk),
     .aresetn(aresetn),
@@ -210,9 +201,7 @@ tlb_slave_axil #(
 );
 
 tlb_slave_axil #(
-    // .TLB_ORDER(TLB_S_ORDER),
-    // .PG_BITS(PG_S_BITS),
-    // .N_ASSOC(N_S_ASSOC)
+    // Nothing
 ) inst_sTlb_slv_0 (
     .aclk(aclk),
     .aresetn(aresetn),

@@ -266,14 +266,16 @@ always_ff @(posedge aclk) begin
           axi_rdata[3] <= WB_FLOW;
           axi_rdata[7:4] <= TLB_S_ORDER;
           axi_rdata[11:8] <= N_S_ASSOC;
-          axi_rdata[15:12] <= TLB_L_ORDER;
-          axi_rdata[19:16] <= N_L_ASSOC;
+          axi_rdata[15:12] <= TLB_D_ORDER;
+          axi_rdata[19:16] <= N_D_ASSOC;
           axi_rdata[25:20] <= PG_S_BITS;
           axi_rdata[31:26] <= PG_L_BITS;
         end
         MEM_CNFG_REG: begin // Memory config
           axi_rdata[0] <= STRM_FLOW;
           axi_rdata[1] <= MEM_FLOW;
+          axi_rdata[2:5] <= N_STRM_AXI;
+          axi_rdata[6:9] <= N_CARD_AXI;
         end
         PR_CNFG_REG: // PR config
           axi_rdata <= PR_FLOW;

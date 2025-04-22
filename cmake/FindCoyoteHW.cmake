@@ -69,21 +69,21 @@ set(HBM_SPLIT 0 CACHE STRING "HBM bank splitting")
 ##
 ## TLB
 ##
-# Regular-pages TLB size; TLB size is 2 ** 10; increase if facing page faults but keep in mind BRAM usage
-set(TLBS_S 10 CACHE STRING "TLB (small) size")
+# Stream TLB size; TLB size is 2 ** 10; increase if facing page faults but keep in mind BRAM usage
+set(TLBS_S 10 CACHE STRING "TLB (stream) size")
 
-# Regular-pages TLB associativity
-set(TLBS_A 4 CACHE STRING "TLB (small) associativity")
+# Stream TLB associativity
+set(TLBS_A 4 CACHE STRING "TLB (stream) associativity")
+
+# Discrete TLB size; TLB size is 2 ** 9; increase if facing page faults but keep in mind BRAM usage
+set(TLBD_S 9 CACHE STRING "TLB (discrete) size")
+
+# Discrete TLB associativity
+set(TLBD_A 2 CACHE STRING "TLB (discrete) associativity")
 
 # Regular-pages TLB page order: 2 ^ TLBS_BITS should corresponds to your regular page size (2 ^ 12 = 4KB, indeed regular page in Linux)
 # Modify only if page size is not 4KB
 set(TLBS_BITS 12 CACHE STRING "TLB (small) page order")
-
-# Huge-pages TLB size; TLB size is 2 ** 9; increase if facing page faults but keep in mind BRAM usage
-set(TLBL_S 9 CACHE STRING "TLB (huge) size")
-
-# Huge-pages TLB associativity
-set(TLBL_A 2 CACHE STRING "TLB (huge) associativity")
 
 # Huge-pages TLB page order: 2 ^ TLBL_BITS should corresponds to your huge page size (2 ^ 21 = 2MB, indeed huge page in Linux)
 # Modify only if page size is not 2MB; e.g. if you use 1GB huge pages

@@ -149,12 +149,13 @@ package lynxTypes;
 
     // TLB ram
     parameter integer TLB_S_ORDER = {{ cnfg.tlbs_s }};
-    parameter integer PG_S_BITS = {{ cnfg.tlbs_bits }};
     parameter integer N_S_ASSOC = {{ cnfg.tlbs_a }};
 
-    parameter integer TLB_L_ORDER = {{ cnfg.tlbl_s }};
+    parameter integer TLB_D_ORDER = {{ cnfg.tlbd_s }};
+    parameter integer N_D_ASSOC = {{ cnfg.tlbd_a }};
+
+    parameter integer PG_S_BITS = {{ cnfg.tlbs_bits }};
     parameter integer PG_L_BITS = {{ cnfg.tlbl_bits }};
-    parameter integer N_L_ASSOC = {{ cnfg.tlbl_a }};
 
     parameter integer TLB_DATA_BITS = 104;
     parameter integer N_TLB_ACTV = {{ cnfg.n_tlb_actv }};

@@ -243,10 +243,10 @@ extern char *config_fname;
 #define TLB_S_ORDER_SHFT 0x4
 #define TLB_S_ASSOC_MASK 0xf00
 #define TLB_S_ASSOC_SHFT 0x8
-#define TLB_L_ORDER_MASK 0xf000
-#define TLB_L_ORDER_SHFT 0xc
-#define TLB_L_ASSOC_MASK 0xf0000
-#define TLB_L_ASSOC_SHFT 0x10
+#define TLB_D_ORDER_MASK 0xf000
+#define TLB_D_ORDER_SHFT 0xc
+#define TLB_D_ASSOC_MASK 0xf0000
+#define TLB_D_ASSOC_SHFT 0x10
 #define TLB_S_PG_SHFT_MASK 0x3f00000
 #define TLB_S_PG_SHFT_SHFT 0x14
 #define TLB_L_PG_SHFT_MASK 0xfc000000
@@ -256,6 +256,11 @@ extern char *config_fname;
 #define EN_STRM_SHFT 0x0
 #define EN_MEM_MASK 0x2
 #define EN_MEM_SHFT 0x1
+#define N_STRM_MASK 0x3c
+#define N_STRM_SHFT 0x2
+#define N_CARD_MASK 0x3c0
+#define N_CARD_SHFT 0x6
+
 #define EN_PR_MASK 0x1
 #define EN_PR_SHFT 0x0
 #define EN_RDMA_MASK 0x1
@@ -941,6 +946,8 @@ struct bus_drvdata {
     int en_wb;
     int en_strm;
     int en_mem;
+    int n_strm;
+    int n_card;
     int en_pr;
     int en_rdma;
     int en_tcp;
@@ -952,6 +959,9 @@ struct bus_drvdata {
     volatile struct fpga_stat_cnfg_regs *fpga_stat_cnfg;
     volatile struct fpga_shell_cnfg_regs *fpga_shell_cnfg;
     struct fpga_dev *fpga_dev;
+    
+    // Total number of stream channels = (en_strm * n_strm + en_mem * n_card) * 2
+    int n_strm_total;
 
     // PR device
     struct reconfig_dev *reconfig_dev;
@@ -968,7 +978,11 @@ struct bus_drvdata {
     int32_t n_pages_in_huge;
 
     // TLB order
+    // Discrete TLB
     struct tlb_order *dtlb_order_default;
+    uint32_t dtlb_npages; // the available number of pages in discrete TLB
+    // Stream TLB
+    uint32_t stlb_npages; // the available number of pages in stream TLB
 
     // Locks
     spinlock_t stat_lock;

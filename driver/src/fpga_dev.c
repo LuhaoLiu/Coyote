@@ -131,21 +131,29 @@ int read_shell_config(struct bus_drvdata *d)
 
     d->dtlb_order_default = kzalloc(sizeof(struct tlb_order), GFP_KERNEL);
     BUG_ON(!d->dtlb_order_default);
-    d->dtlb_order_default->hugepage = true;
+    d->dtlb_order_default->hugepage = true; // discrete TLB uses huge pages by default
     d->dtlb_order_default->page_info = d->huge_page_info;
-    d->dtlb_order_default->assoc = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_ASSOC_MASK) >> TLB_L_ASSOC_SHFT;
-    d->dtlb_order_default->key_size = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_L_ORDER_MASK) >> TLB_L_ORDER_SHFT;
+    d->dtlb_order_default->assoc = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_D_ASSOC_MASK) >> TLB_D_ASSOC_SHFT;
+    d->dtlb_order_default->key_size = (d->fpga_shell_cnfg->ctrl_cnfg & TLB_D_ORDER_MASK) >> TLB_D_ORDER_SHFT;
     d->dtlb_order_default->key_mask = (1UL << d->dtlb_order_default->key_size) - 1UL;
-    d->dtlb_order_default->tag_size = TLB_VADDR_RANGE - d->dtlb_order_default->page_info->page_shift  - d->dtlb_order_default->key_size;
+    d->dtlb_order_default->tag_size = TLB_VADDR_RANGE - d->dtlb_order_default->page_info->page_shift - d->dtlb_order_default->key_size;
     d->dtlb_order_default->tag_mask = (1UL << d->dtlb_order_default->tag_size) - 1UL;
-    d->dtlb_order_default->phy_size = TLB_PADDR_RANGE - d->dtlb_order_default->page_info->page_shift ;
+    d->dtlb_order_default->phy_size = TLB_PADDR_RANGE - d->dtlb_order_default->page_info->page_shift;
     d->dtlb_order_default->phy_mask = (1UL << d->dtlb_order_default->phy_size) - 1UL;
     pr_info("dTLB order %lld, dTLB assoc %d, dTLB page size %lld\n", d->dtlb_order_default->key_size, d->dtlb_order_default->assoc, d->dtlb_order_default->page_info->page_size);
+    
+    d->dtlb_npages = (1 << d->dtlb_order_default->key_size) * d->dtlb_order_default->assoc;
+    d->stlb_npages = (1 << ((d->fpga_shell_cnfg->ctrl_cnfg & TLB_S_ORDER_MASK) >> TLB_S_ORDER_SHFT)) *
+                     ((d->fpga_shell_cnfg->ctrl_cnfg & TLB_S_ASSOC_MASK) >> TLB_S_ASSOC_SHFT);
+    pr_info("dTLB available pages %d, sTLB available pages %d\n", d->dtlb_npages, d->stlb_npages);
 
     // mem
     d->en_strm = (d->fpga_shell_cnfg->mem_cnfg & EN_STRM_MASK) >> EN_STRM_SHFT; 
     d->en_mem = (d->fpga_shell_cnfg->mem_cnfg & EN_MEM_MASK) >> EN_MEM_SHFT;
-    pr_info("enabled host streams %d, enabled card streams (mem) %d\n", d->en_strm, d->en_mem);
+    d->n_strm = (d->fpga_shell_cnfg->mem_cnfg & N_STRM_MASK) >> N_STRM_SHFT;
+    d->n_card = (d->fpga_shell_cnfg->mem_cnfg & N_CARD_MASK) >> N_CARD_SHFT;
+    d->n_strm_total = (d->en_strm * d->n_strm + d->en_mem * d->n_card) * 2;
+    pr_info("enabled host streams %d x%d, enabled card streams (mem) %d x%d\n", d->en_strm, d->n_strm, d->en_mem, d->n_card);
 
     d->card_huge_offs = MEM_SEP;
     d->card_reg_offs = MEM_START;

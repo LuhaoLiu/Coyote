@@ -62,8 +62,8 @@ set cfg(en_xch_0)               ${EN_XCH_0}
 set cfg(en_xch_1)               ${EN_XCH_1}
 set cfg(tlbs_s)                 ${TLBS_S}
 set cfg(tlbs_a)                 ${TLBS_A}
-set cfg(tlbl_s)                 ${TLBL_S}
-set cfg(tlbl_a)                 ${TLBL_A}
+set cfg(tlbd_s)                 ${TLBD_S}
+set cfg(tlbd_a)                 ${TLBD_A}
 set cfg(tlbl_bits)              ${TLBL_BITS}
 set cfg(tlbs_bits)              ${TLBS_BITS}
 set cfg(n_tlb_actv)             ${N_TLB_ACTV}

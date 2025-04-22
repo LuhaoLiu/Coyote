@@ -243,8 +243,10 @@ void card_free(struct fpga_dev *d, uint64_t *card_paddr, uint32_t n_pages, bool 
  * @param hpid - host PID
  * @param entry - liste entry
  * @param tlb_type - TLB type (0: stream, 1: discrete)
+ * 
+ * @return used TLB type (0: stream, 1: discrete)
  */
-void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t paddr, int32_t host, int32_t cpid, pid_t hpid, int tlb_type)
+int tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t paddr, int32_t host, int32_t cpid, pid_t hpid, int tlb_type)
 {
     uint64_t entry [2];
 
@@ -272,6 +274,8 @@ void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t padd
         // map each page through AXIL
         d->fpga_dTlb[0] = entry[0];
         d->fpga_dTlb[1] = entry[1];
+
+        return 1;
     } else {
         // Stream TLB
         if (tlb_type != 0) {
@@ -299,6 +303,8 @@ void tlb_create_map(struct fpga_dev *d, uint64_t vaddr, bool huge, uint64_t padd
         // map each page through AXIL
         d->fpga_sTlb[0] = entry[0];
         d->fpga_sTlb[1] = entry[1];
+
+        return 0;
     }
 }
 

@@ -150,10 +150,10 @@ int read_shell_config(struct bus_drvdata *d)
     // mem
     d->en_strm = (d->fpga_shell_cnfg->mem_cnfg & EN_STRM_MASK) >> EN_STRM_SHFT; 
     d->en_mem = (d->fpga_shell_cnfg->mem_cnfg & EN_MEM_MASK) >> EN_MEM_SHFT;
-    d->n_strm = (d->fpga_shell_cnfg->mem_cnfg & N_STRM_MASK) >> N_STRM_SHFT;
-    d->n_card = (d->fpga_shell_cnfg->mem_cnfg & N_CARD_MASK) >> N_CARD_SHFT;
-    d->n_strm_total = (d->en_strm * d->n_strm + d->en_mem * d->n_card) * 2;
-    pr_info("enabled host streams %d x%d, enabled card streams (mem) %d x%d\n", d->en_strm, d->n_strm, d->en_mem, d->n_card);
+    d->n_strm_axi = (d->fpga_shell_cnfg->mem_cnfg & N_STRM_AXI_MASK) >> N_STRM_AXI_SHFT;
+    d->n_card_axi = (d->fpga_shell_cnfg->mem_cnfg & N_CARD_AXI_MASK) >> N_CARD_AXI_SHFT;
+    d->n_strm_total = (d->en_strm * d->n_strm_axi + d->en_mem * d->n_card_axi) * 2;
+    pr_info("enabled host streams %d x%d, enabled card streams (mem) %d x%d\n", d->en_strm, d->n_strm_axi, d->en_mem, d->n_card_axi);
 
     d->card_huge_offs = MEM_SEP;
     d->card_reg_offs = MEM_START;

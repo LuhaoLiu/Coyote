@@ -256,10 +256,10 @@ extern char *config_fname;
 #define EN_STRM_SHFT 0x0
 #define EN_MEM_MASK 0x2
 #define EN_MEM_SHFT 0x1
-#define N_STRM_MASK 0x3c
-#define N_STRM_SHFT 0x2
-#define N_CARD_MASK 0x3c0
-#define N_CARD_SHFT 0x6
+#define N_STRM_AXI_MASK 0x3c
+#define N_STRM_AXI_SHFT 0x2
+#define N_CARD_AXI_MASK 0x3c0
+#define N_CARD_AXI_SHFT 0x6
 
 #define EN_PR_MASK 0x1
 #define EN_PR_SHFT 0x0
@@ -946,8 +946,8 @@ struct bus_drvdata {
     int en_wb;
     int en_strm;
     int en_mem;
-    int n_strm;
-    int n_card;
+    int n_strm_axi;
+    int n_card_axi;
     int en_pr;
     int en_rdma;
     int en_tcp;
@@ -960,7 +960,7 @@ struct bus_drvdata {
     volatile struct fpga_shell_cnfg_regs *fpga_shell_cnfg;
     struct fpga_dev *fpga_dev;
     
-    // Total number of stream channels = (en_strm * n_strm + en_mem * n_card) * 2
+    // Total number of stream channels = (en_strm * n_strm_axi + en_mem * n_card_axi) * 2
     int n_strm_total;
 
     // PR device

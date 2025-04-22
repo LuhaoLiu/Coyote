@@ -200,12 +200,19 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
 
     vaddr_tmp = first_pfa;
 
+    // how many pages can we map once?
+    uint32_t max_n_map_pages = (tlb_type_internal == 1 ? d->pd->dtlb_npages : d->pd->stlb_npages) / d->pd->n_strm_total;
+
     if(user_pg->huge) {
         // fill mappings - huge
-        for (i = 0; (i < n_pages) && (n_pg_mapped < MAX_N_MAP_PAGES); i+=pd->n_pages_in_huge) {
+        for (i = 0; (i < n_pages) && (n_pg_mapped < max_n_map_pages); i+=pd->n_pages_in_huge) {
             tlb_create_map(d, vaddr_tmp, true,
                 (user_pg->host == HOST_ACCESS) ? user_pg->hpages[i + pg_offs] : user_pg->cpages[i + pg_offs],
                 user_pg->host, user_pg->cpid, hpid, tlb_type_internal);
+            
+            // we should check which tlb type was actually used
+            // but dTLB won't be used if requested as sTLB
+            // so given the assumption that dTLB<sTLB, we can ignore this check safely
 
             vaddr_tmp += pd->n_pages_in_huge;
             n_pg_mapped++;
@@ -245,10 +252,14 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
         //     i += is_huge ? pd->n_pages_in_huge : 1;
         //     n_pg_mapped++;
         // }
-        for (i = 0; (i < n_pages) && (n_pg_mapped < MAX_N_MAP_PAGES); ++i) {
+        for (i = 0; (i < n_pages) && (n_pg_mapped < max_n_map_pages); ++i) {
             tlb_create_map(d, vaddr_tmp, false,
                 (user_pg->host == HOST_ACCESS) ? user_pg->hpages[i + pg_offs] : user_pg->cpages[i + pg_offs],
                 user_pg->host, user_pg->cpid, hpid, tlb_type_internal);
+            
+            // we should check which tlb type was actually used
+            // but dTLB won't be used if requested as sTLB
+            // so given the assumption that dTLB<sTLB, we can ignore this check safely
 
             vaddr_tmp += 1;
             n_pg_mapped++;

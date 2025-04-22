@@ -89,12 +89,6 @@ module tlb_fsm #(
 // -- Constants
 localparam integer PG_L_SIZE = 1 << PG_L_BITS;
 localparam integer PG_S_SIZE = 1 << PG_S_BITS;
-localparam integer HASH_L_BITS = TLB_L_ORDER;
-localparam integer HASH_S_BITS = TLB_S_ORDER;
-localparam integer PHY_L_BITS = PADDR_BITS - PG_L_BITS;
-localparam integer PHY_S_BITS = PADDR_BITS - PG_S_BITS;
-localparam integer TAG_L_BITS = VADDR_BITS - HASH_L_BITS - PG_L_BITS;
-localparam integer TAG_S_BITS = VADDR_BITS - HASH_S_BITS - PG_S_BITS;
 localparam integer PHY_L_OFFS      = HPID_BITS;
 localparam integer PHY_S_OFFS      = HPID_BITS;
 localparam integer HPID_L_OFFS     = 0;
@@ -140,7 +134,6 @@ logic host_C, host_N;
 logic [TLB_L_DATA_BITS-1:0] data_l_C, data_l_N;
 logic [TLB_S_DATA_BITS-1:0] data_s_C, data_s_N;
 logic hit;
-logic [HPID_BITS-1:0] hpid;
 
 // Return
 logic [1:0] rtrn_C, rtrn_N;
@@ -621,7 +614,6 @@ always_comb begin: DP
 	// TLB
     data_l_N = data_l_C;
 	data_s_N = data_s_C;
-    hpid = dTlb.hit ? data_l_C[HPID_L_OFFS+:HPID_BITS] : data_s_C[HPID_S_OFFS+:HPID_BITS];
     
 	// Out
 	plen_N = plen_C;

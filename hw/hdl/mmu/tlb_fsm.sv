@@ -89,6 +89,8 @@ module tlb_fsm #(
 // -- Constants
 localparam integer PG_L_SIZE = 1 << PG_L_BITS;
 localparam integer PG_S_SIZE = 1 << PG_S_BITS;
+localparam integer PHY_L_BITS = PADDR_BITS - PG_L_BITS;
+localparam integer PHY_S_BITS = PADDR_BITS - PG_S_BITS;
 localparam integer PHY_L_OFFS      = HPID_BITS;
 localparam integer PHY_S_OFFS      = HPID_BITS;
 localparam integer HPID_L_OFFS     = 0;

@@ -274,8 +274,8 @@ always_ff @(posedge aclk) begin
         MEM_CNFG_REG: begin // Memory config
           axi_rdata[0] <= STRM_FLOW;
           axi_rdata[1] <= MEM_FLOW;
-          axi_rdata[2:5] <= N_STRM_AXI;
-          axi_rdata[6:9] <= N_CARD_AXI;
+          axi_rdata[5:2] <= N_STRM_AXI;
+          axi_rdata[9:6] <= N_CARD_AXI;
         end
         PR_CNFG_REG: // PR config
           axi_rdata <= PR_FLOW;

@@ -150,6 +150,7 @@ public:
      * @param cs_alloc : Coyote allocation struct
 	 */
 	void userMap(void *vaddr, uint32_t len, bool remote = false);
+	void userMapComplex(void *vaddr, uint32_t len, int32_t stream = 0, int tlb_type = -1, bool remote = false);
 	void userUnmap(void *vaddr);
 
     void* getMem(csAlloc&& cs_alloc);

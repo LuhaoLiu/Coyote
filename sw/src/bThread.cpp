@@ -422,6 +422,45 @@ void bThread::userMap(void *vaddr, uint32_t len, bool remote) {
 	tmp[0] = reinterpret_cast<uint64_t>(vaddr);
 	tmp[1] = static_cast<uint64_t>(len);
 	tmp[2] = static_cast<uint64_t>(ctid);
+    tmp[3] = static_cast<uint64_t>(1); // stream: true
+    tmp[4] = static_cast<uint64_t>(-1); // tlb_type: auto
+
+    # ifdef VERBOSE
+        std::cout << "bThread: Called userMap to map user-defined memory at vaddr " << vaddr << ", length " << len << " and ctid " << ctid << "." << std::endl; 
+    # endif
+
+    // Map to the memory space 
+	if(ioctl(fd, IOCTL_MAP_USER, &tmp))
+		throw std::runtime_error("ioctl_map_user() failed");
+
+    // If remote is set, the information about the vaddr and length of the memory are attached to the qpair
+    if(remote) {
+        qpair->local.vaddr = vaddr;
+        qpair->local.size = len;
+
+        is_buff_attached = true;
+    }
+}
+
+/**
+ * @brief Explicit TLB mapping with fine grained control
+ * 
+ * @param vaddr - user space address
+ * @param len - length 
+ * @param stream - stream
+ * @param tlb_type - TLB type (-1:auto, 0: stream, 1: discrete)
+ *
+ * Manual memory mapping for user-defined regions in the memory space
+ * Auto migration to card if stream is set to false
+ */
+void bThread::userMapComplex(void *vaddr, uint32_t len, int32_t stream, int tlb_type, bool remote) {
+    // tmp holds the three relevant variables of vaddr, lenght and ctid for this mapping
+	uint64_t tmp[maxUserCopyVals];
+	tmp[0] = reinterpret_cast<uint64_t>(vaddr);
+	tmp[1] = static_cast<uint64_t>(len);
+	tmp[2] = static_cast<uint64_t>(ctid);
+    tmp[3] = static_cast<uint64_t>(stream); // stream: true
+    tmp[4] = static_cast<uint64_t>(tlb_type); // tlb_type: auto
 
     # ifdef VERBOSE
         std::cout << "bThread: Called userMap to map user-defined memory at vaddr " << vaddr << ", length " << len << " and ctid " << ctid << "." << std::endl; 

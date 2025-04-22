@@ -134,6 +134,8 @@ int main()
     tmp[0] = (uint64_t) buffer;
     tmp[1] = len;
     tmp[2] = cpid;
+    tmp[3] = 1;
+    tmp[4] = (uint64_t) -1;
 
     ret_val = ioctl(fd, IOCTL_MAP_USER, tmp);
     if (ret_val)

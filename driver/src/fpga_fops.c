@@ -147,6 +147,8 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     struct list_head *l_p, *l_n;
     struct cpid_entry *l_entry;
     bool k = false;
+    int32_t stream;
+    int tlb_type;
 #ifdef HMM_KERNEL    
     struct task_struct *task;
     struct mm_struct *mm;
@@ -331,13 +333,15 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     
     // explicit mapping
     case IOCTL_MAP_USER:
-        // read vaddr + len + cpid
-        ret_val = copy_from_user(&tmp, (unsigned long *)arg, 3 * sizeof(unsigned long));
+        // read vaddr + len + cpid + strm + tlb_type
+        ret_val = copy_from_user(&tmp, (unsigned long *)arg, 5 * sizeof(unsigned long));
         if (ret_val != 0) {
             pr_info("user data could not be coppied, return %d\n", ret_val);
         } else {
             cpid = (int32_t)tmp[2];
             hpid = d->pid_array[cpid];
+            stream = (int32_t)tmp[3];
+            tlb_type = (int)tmp[4];
 
             // lock
             mutex_lock(&d->mmu_lock);
@@ -345,10 +349,10 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 #ifdef HMM_KERNEL
             if(en_hmm) 
-                ret_val = mmu_handler_hmm(d, tmp[0], tmp[1], cpid, true, hpid, -1);
+                ret_val = mmu_handler_hmm(d, tmp[0], tmp[1], cpid, stream, hpid, tlb_type);
             else
 #endif            
-                ret_val = mmu_handler_gup(d, tmp[0], tmp[1], cpid, true, hpid, -1);
+                ret_val = mmu_handler_gup(d, tmp[0], tmp[1], cpid, stream, hpid, tlb_type);
             
             if(ret_val) {
                 pr_info("buffer could not be mapped, ret_val: %d\n", ret_val);

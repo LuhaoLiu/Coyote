@@ -38,7 +38,7 @@
 
 // Constants
 #define N_LATENCY_REPS 1
-#define N_THROUGHPUT_REPS 32
+#define N_THROUGHPUT_REPS 1
 
 // Default vFPGA to assign cThreads to; for designs with one region (vFPGA) this is the only possible value
 #define DEFAULT_VFPGA_ID 0
@@ -102,6 +102,7 @@ int main(int argc, char *argv[])  {
     // Run-time options; for more details see the description below
     bool hugepages, mapped, stream;
     unsigned int min_size, max_size, n_runs;
+    int tlb_type;
 
     // Parse CLI arguments using Boost, an external library, providing easy parsing of run-time parameters
     // We can easily set the variable type, the variable used for storing the parameter and default values
@@ -112,10 +113,16 @@ int main(int argc, char *argv[])  {
         ("stream,s", boost::program_options::value<bool>(&stream)->default_value(1), "Source / destination data stream: HOST(1) or FPGA(0)")
         ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(100), "Number of times to repeat the test")
         ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(64), "Starting (minimum) transfer size")
-        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(4 * 1024 * 1024), "Ending (maximum) transfer size");
+        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(4 * 1024 * 1024), "Ending (maximum) transfer size")
+        ("tlb,t", boost::program_options::value<int>(&tlb_type)->default_value(-1), "TLB Type (-1: auto, 0: stream, 1: discrete)");
     boost::program_options::variables_map command_line_arguments;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);
     boost::program_options::notify(command_line_arguments);
+
+    if (tlb_type != -1 && tlb_type != 0 && tlb_type != 1) {
+        std::cerr << "Invalid TLB type, failback to Auto-Selection." << std::endl;
+        tlb_type = -1;
+    }
 
     PR_HEADER("CLI PARAMETERS:");
     std::cout << "Enable hugepages: " << hugepages << std::endl;
@@ -123,10 +130,16 @@ int main(int argc, char *argv[])  {
     std::cout << "Data stream: " << (stream ? "HOST" : "CARD") << std::endl;
     std::cout << "Number of test runs: " << n_runs << std::endl;
     std::cout << "Starting transfer size: " << min_size << std::endl;
-    std::cout << "Ending transfer size: " << max_size << std::endl << std::endl;
+    std::cout << "Ending transfer size: " << max_size << std::endl;
+    std::cout << "TLB Type: " << (tlb_type == -1 ? "AUTO" : (tlb_type == 0 ? "STREAM" : "DISCRETE")) << std::endl << std::endl;
 
     // Obtain a Coyote thread
     std::unique_ptr<coyote::cThread<std::any>> coyote_thread(new coyote::cThread<std::any>(DEFAULT_VFPGA_ID, getpid(), 0));
+
+    // If TLB is explicitly set to discrete, we need to update the page size
+    if (tlb_type == 1) {
+        coyote_thread->setDTlbPgsize(hugepages ? 21 : 12);
+    }
 
     // Allocate memory for source and destination data
     // We cast to integer arrays, so that we can compare source and destination values after transfers 
@@ -134,12 +147,14 @@ int main(int argc, char *argv[])  {
     int *src_mem, *dst_mem;
     if (mapped) {
         if (hugepages) {
-            src_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::HPF, max_size});
-            dst_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::HPF, max_size});
+            src_mem = (int *) mmap(NULL, max_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+            dst_mem = (int *) mmap(NULL, max_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
         } else {
-            src_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::REG, max_size});
-            dst_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::REG, max_size});
+            src_mem = (int *) aligned_alloc(coyote::pageSize, max_size);
+            dst_mem = (int *) aligned_alloc(coyote::pageSize, max_size);
         }
+        coyote_thread->userMapComplex(src_mem, max_size, stream, tlb_type);
+        coyote_thread->userMapComplex(dst_mem, max_size, stream, tlb_type);
     } else {
         if (hugepages) {
             src_mem = (int *) mmap(NULL, max_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
@@ -149,6 +164,10 @@ int main(int argc, char *argv[])  {
             dst_mem = (int *) aligned_alloc(coyote::pageSize, max_size);
         }
     }
+
+    int tmp;
+    printf("map finished, type a number to continue...\n");
+    scanf("%d", &tmp);
 
     // Exit if memory couldn't be allocated
     if (!src_mem || !dst_mem) { throw std::runtime_error("Could not allocate memory; exiting..."); }
@@ -162,6 +181,9 @@ int main(int argc, char *argv[])  {
     PR_HEADER("PERF LOCAL");
     unsigned int curr_size = min_size;
     while(curr_size <= max_size) {
+        printf("next test size: %d, type a number to continue...\n", curr_size);
+        scanf("%d", &tmp);
+
         // Update SG size entry
         std::cout << "Size: " << std::setw(8) << curr_size << "; ";
         sg.local.src_len = curr_size; sg.local.dst_len = curr_size; 
@@ -186,6 +208,9 @@ int main(int argc, char *argv[])  {
         if(!hugepages) { free(src_mem); free(dst_mem); }
         else { munmap(src_mem, max_size); munmap(dst_mem, max_size); }
     }
+
+    printf("test finished, type a number to continue...\n");
+    scanf("%d", &tmp);
     
     return EXIT_SUCCESS;
 }

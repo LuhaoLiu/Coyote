@@ -70,10 +70,10 @@ set(HBM_SPLIT 0 CACHE STRING "HBM bank splitting")
 ## TLB
 ##
 # Regular-pages TLB size; TLB size is 2 ** 10; increase if facing page faults but keep in mind BRAM usage
-set(TLBS_S 10 CACHE STRING "TLB (small) size")
+set(TLBS_S 9 CACHE STRING "TLB (small) size")
 
 # Regular-pages TLB associativity
-set(TLBS_A 4 CACHE STRING "TLB (small) associativity")
+set(TLBS_A 2 CACHE STRING "TLB (small) associativity")
 
 # Regular-pages TLB page order: 2 ^ TLBS_BITS should corresponds to your regular page size (2 ^ 12 = 4KB, indeed regular page in Linux)
 # Modify only if page size is not 4KB

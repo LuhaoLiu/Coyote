@@ -10,8 +10,8 @@ project(example_01_static_local)
 message("*** Coyote Example 1: Static HW Design & Data Movement Initiated by the CPU [Hardware Build] ***")
 
 # As explained in the README.md, in this example the "static" build flow is used; esentially resynthesizing the static layer
-set(BUILD_STATIC 1)
-set(BUILD_SHELL 0)
+# set(BUILD_STATIC 1)
+# set(BUILD_SHELL 0)
 
 # Enables Place-and-Route timing optimizations; Vivado implementation will take longer in order to meet the target clock frequency
 # This option is rarely needed; but achieving timing closure with the XDMA core can be tricky so for static designs this is recommended

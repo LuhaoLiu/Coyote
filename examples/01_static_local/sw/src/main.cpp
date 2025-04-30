@@ -45,7 +45,7 @@
 
 double run_bench(
     std::unique_ptr<coyote::cThread<std::any>> &coyote_thread, coyote::sgEntry &sg, 
-    int *src_mem, int *dst_mem, uint transfers, uint n_runs, bool sync_back
+    int *src_mem, int *dst_mem, uint transfers, uint n_runs, bool sync_back, bool pre_fault, int stream, int tlb_type
 ) {
     // Initialise helper benchmarking class
     // Used for keeping track of execution times & some helper functions (mean, P25, P75 etc.)
@@ -63,6 +63,14 @@ double run_bench(
         // Clear the completion counters, so that the test can be repeated multiple times independently
         // Essentially, sets the result from the function checkCompleted(...) to zero
         coyote_thread->clearCompleted();
+        // Unmap the TLB to revert to clear state
+        coyote_thread->userUnmap(src_mem);
+        coyote_thread->userUnmap(dst_mem);
+        // Prefault the memory, if required
+        if (pre_fault) {
+            coyote_thread->userMapComplex(src_mem, sg.local.src_len, stream, tlb_type);
+            coyote_thread->userMapComplex(dst_mem, sg.local.dst_len, stream, tlb_type);
+        }
     };
 
     // Execute benchmark
@@ -103,6 +111,7 @@ int main(int argc, char *argv[])  {
     bool hugepages, mapped, stream;
     unsigned int min_size, max_size, n_runs;
     int tlb_type;
+    int debug;
 
     // Parse CLI arguments using Boost, an external library, providing easy parsing of run-time parameters
     // We can easily set the variable type, the variable used for storing the parameter and default values
@@ -114,7 +123,8 @@ int main(int argc, char *argv[])  {
         ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(100), "Number of times to repeat the test")
         ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(64), "Starting (minimum) transfer size")
         ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(4 * 1024 * 1024), "Ending (maximum) transfer size")
-        ("tlb,t", boost::program_options::value<int>(&tlb_type)->default_value(-1), "TLB Type (-1: auto, 0: stream, 1: discrete)");
+        ("tlb,t", boost::program_options::value<int>(&tlb_type)->default_value(-1), "TLB Type (-1: auto, 0: stream, 1: discrete)")
+        ("debug,d", boost::program_options::value<int>(&debug)->default_value(0), "Debug level (0-1)");
     boost::program_options::variables_map command_line_arguments;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);
     boost::program_options::notify(command_line_arguments);
@@ -166,8 +176,10 @@ int main(int argc, char *argv[])  {
     }
 
     int tmp;
-    printf("map finished, type a number to continue...\n");
-    scanf("%d", &tmp);
+    if (debug) {
+        printf("map finished, type a number to continue...\n");
+        scanf("%d", &tmp);
+    }
 
     // Exit if memory couldn't be allocated
     if (!src_mem || !dst_mem) { throw std::runtime_error("Could not allocate memory; exiting..."); }
@@ -181,20 +193,22 @@ int main(int argc, char *argv[])  {
     PR_HEADER("PERF LOCAL");
     unsigned int curr_size = min_size;
     while(curr_size <= max_size) {
-        printf("next test size: %d, type a number to continue...\n", curr_size);
-        scanf("%d", &tmp);
+        if (debug) {
+            printf("next test size: %d, type a number to continue...\n", curr_size);
+            scanf("%d", &tmp);
+        }
 
         // Update SG size entry
         std::cout << "Size: " << std::setw(8) << curr_size << "; ";
         sg.local.src_len = curr_size; sg.local.dst_len = curr_size; 
 
         // Run throughput test
-        double throughput_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_THROUGHPUT_REPS, n_runs, !stream);
+        double throughput_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_THROUGHPUT_REPS, n_runs, !stream, mapped, stream, tlb_type);
         double throughput = ((double) N_THROUGHPUT_REPS * (double) curr_size) / (1024.0 * 1024.0 * throughput_time * 1e-9);
         std::cout << "Average throughput: " << std::setw(8) << throughput << " MB/s; ";
         
         // Run latency test
-        double latency_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_LATENCY_REPS, n_runs, !stream);
+        double latency_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_LATENCY_REPS, n_runs, !stream, mapped, stream, tlb_type);
         std::cout << "Average latency: " << std::setw(8) << latency_time / 1e3 << " us" << std::endl;
 
         // Update size and proceed to next iteration
@@ -209,8 +223,10 @@ int main(int argc, char *argv[])  {
         else { munmap(src_mem, max_size); munmap(dst_mem, max_size); }
     }
 
-    printf("test finished, type a number to continue...\n");
-    scanf("%d", &tmp);
+    if (debug) {
+        printf("test finished, type a number to continue...\n");
+        scanf("%d", &tmp);
+    }
     
     return EXIT_SUCCESS;
 }

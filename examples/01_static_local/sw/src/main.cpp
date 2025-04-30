@@ -49,7 +49,7 @@ double run_bench(
 ) {
     // Initialise helper benchmarking class
     // Used for keeping track of execution times & some helper functions (mean, P25, P75 etc.)
-    coyote::cBench bench(n_runs);
+    coyote::cBench bench(n_runs, n_runs / 10 + 1);
     
     // Randomly set the source data between -512 and +512; initialise destination memory to 0
     assert(sg.local.src_len == sg.local.dst_len);
@@ -63,9 +63,11 @@ double run_bench(
         // Clear the completion counters, so that the test can be repeated multiple times independently
         // Essentially, sets the result from the function checkCompleted(...) to zero
         coyote_thread->clearCompleted();
-        // Unmap the TLB to revert to clear state
-        coyote_thread->userUnmap(src_mem);
-        coyote_thread->userUnmap(dst_mem);
+        // Unmap all TLB to revert to clear state
+        for (int i = 0; i < sg.local.src_len; i += 4096) {
+            coyote_thread->userUnmap((uint8_t *)src_mem + i);
+            coyote_thread->userUnmap((uint8_t *)dst_mem + i);                 
+        }
         // Prefault the memory, if required
         if (pre_fault) {
             coyote_thread->userMap(src_mem, sg.local.src_len);

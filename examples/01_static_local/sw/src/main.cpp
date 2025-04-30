@@ -45,7 +45,7 @@
 
 double run_bench(
     std::unique_ptr<coyote::cThread<std::any>> &coyote_thread, coyote::sgEntry &sg, 
-    int *src_mem, int *dst_mem, uint transfers, uint n_runs, bool sync_back
+    int *src_mem, int *dst_mem, uint transfers, uint n_runs, bool sync_back, bool pre_fault
 ) {
     // Initialise helper benchmarking class
     // Used for keeping track of execution times & some helper functions (mean, P25, P75 etc.)
@@ -63,6 +63,14 @@ double run_bench(
         // Clear the completion counters, so that the test can be repeated multiple times independently
         // Essentially, sets the result from the function checkCompleted(...) to zero
         coyote_thread->clearCompleted();
+        // Unmap the TLB to revert to clear state
+        coyote_thread->userUnmap(src_mem);
+        coyote_thread->userUnmap(dst_mem);
+        // Prefault the memory, if required
+        if (pre_fault) {
+            coyote_thread->userMap(src_mem, sg.local.src_len);
+            coyote_thread->userMap(dst_mem, sg.local.dst_len);
+        }
     };
 
     // Execute benchmark
@@ -167,12 +175,12 @@ int main(int argc, char *argv[])  {
         sg.local.src_len = curr_size; sg.local.dst_len = curr_size; 
 
         // Run throughput test
-        double throughput_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_THROUGHPUT_REPS, n_runs, !stream);
+        double throughput_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_THROUGHPUT_REPS, n_runs, !stream, mapped);
         double throughput = ((double) N_THROUGHPUT_REPS * (double) curr_size) / (1024.0 * 1024.0 * throughput_time * 1e-9);
         std::cout << "Average throughput: " << std::setw(8) << throughput << " MB/s; ";
         
         // Run latency test
-        double latency_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_LATENCY_REPS, n_runs, !stream);
+        double latency_time = run_bench(coyote_thread, sg, src_mem, dst_mem, N_LATENCY_REPS, n_runs, !stream, mapped);
         std::cout << "Average latency: " << std::setw(8) << latency_time / 1e3 << " us" << std::endl;
 
         // Update size and proceed to next iteration

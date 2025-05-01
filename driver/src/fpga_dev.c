@@ -486,6 +486,9 @@ int init_fpga_devices(struct bus_drvdata *d)
         BUG_ON(!d->fpga_dev[i].dtlb_order);
         memcpy(d->fpga_dev[i].dtlb_order, d->dtlb_order_default, sizeof(struct tlb_order));
 
+        // Number of streams
+        d->fpga_dev[i].n_strm_total = d->n_strm_total;
+
         // FPGA engine control
         if(d->en_avx) {
             d->fpga_dev[i].fpga_cnfg = ioremap(d->fpga_dev[i].fpga_phys_addr_ctrl_avx, FPGA_CTRL_CNFG_AVX_SIZE);

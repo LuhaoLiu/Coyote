@@ -158,6 +158,9 @@ public:
 
 	void setDTlbPgsize(uint32_t pgsize);
 
+	void setNStrm(uint32_t n_strm);
+	uint32_t getNStrm();
+
 	/**
 	 * @brief CSR registers
 	 * 

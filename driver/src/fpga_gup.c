@@ -201,7 +201,13 @@ void tlb_map_gup(struct fpga_dev *d, struct desc_aligned *pfa, struct user_pages
     vaddr_tmp = first_pfa;
 
     // how many pages can we map once?
-    uint32_t max_n_map_pages = (tlb_type_internal == 1 ? d->pd->dtlb_npages : d->pd->stlb_npages) / d->pd->n_strm_total;
+    uint32_t max_n_map_pages;
+    if (d->pd->n_strm_total <= 0) {
+        dbg_info("WARN: No host/card channels?\n");
+        max_n_map_pages = (tlb_type_internal == 1 ? d->pd->dtlb_npages : d->pd->stlb_npages);
+    } else {
+        max_n_map_pages = (tlb_type_internal == 1 ? d->pd->dtlb_npages : d->pd->stlb_npages) / d->pd->n_strm_total;
+    }
 
     if(user_pg->huge) {
         // fill mappings - huge

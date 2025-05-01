@@ -414,6 +414,9 @@ extern char *config_fname;
 
 #define IOCTL_DTLB_SET_PGSIZE _IOW('F', 19, unsigned long) // set pg size of dTlb
 
+#define IOCTL_SET_N_STRM _IOW('F', 20, unsigned long)
+#define IOCTL_GET_N_STRM _IOR('F', 21, unsigned long)
+
 #define IOCTL_ALLOC_HOST_RECONFIG_MEM _IOW('P', 1, unsigned long) // pr alloc
 #define IOCTL_FREE_HOST_RECONFIG_MEM _IOW('P', 2, unsigned long) //
 #define IOCTL_RECONFIGURE_APP _IOW('P', 3, unsigned long) // reconfig app
@@ -846,6 +849,9 @@ struct fpga_dev {
 
     // TLB order
     struct tlb_order *dtlb_order;
+
+    // Default total number of stream channels = (en_strm * n_strm_axi + en_mem * n_card_axi) * 2
+    int n_strm_total;
 
     // IRQ
     spinlock_t irq_lock; 

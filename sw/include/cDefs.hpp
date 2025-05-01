@@ -92,6 +92,9 @@ namespace coyote {
 
 #define IOCTL_DTLB_SET_PGSIZE               _IOW('F', 19, unsigned long)
 
+#define IOCTL_SET_N_STRM                  	_IOW('F', 20, unsigned long)
+#define IOCTL_GET_N_STRM                  	_IOR('F', 21, unsigned long)
+
 #define IOCTL_ALLOC_HOST_RECONFIG_MEM       _IOW('P', 1, unsigned long)
 #define IOCTL_FREE_HOST_RECONFIG_MEM        _IOW('P', 2, unsigned long)
 #define IOCTL_RECONFIGURE_APP               _IOW('P', 3, unsigned long)

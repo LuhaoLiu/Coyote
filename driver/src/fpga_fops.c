@@ -602,6 +602,29 @@ long fpga_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                 dbg_info("setting page size to %d", pgsize);
             }
         }
+        break;
+
+    case IOCTL_SET_N_STRM:
+        ret_val = copy_from_user(&tmp, (unsigned long *) arg, sizeof(unsigned long));
+        if (ret_val != 0) {
+            pr_info("user data could not be coppied, return %d\n", ret_val);
+        } else {
+            if (tmp[0] <= 0) {
+                pr_info("invalid number of streams %lld\n", tmp[0]);
+            } else {
+                d->n_strm_total = (int32_t) tmp[0];
+                dbg_info("setting number of streams to %d\n", d->n_strm_total);
+            }
+        }
+        break;
+    
+    case IOCTL_GET_N_STRM:
+        tmp[0] = d->n_strm_total;
+        ret_val = copy_to_user((unsigned long *)arg, &tmp, sizeof(unsigned long));
+        if (ret_val != 0) {
+            pr_info("user data could not be coppied, return %d\n", ret_val);
+        }
+        break;
 
     default:
         break;

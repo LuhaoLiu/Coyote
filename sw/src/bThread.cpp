@@ -753,6 +753,25 @@ void bThread::setDTlbPgsize(uint32_t pgsize) {
         throw std::runtime_error("ioctl_set_tlb_pg_size() failed");
 }
 
+// Set the number of streams in usage
+void bThread::setNStrm(uint32_t n_strm) {
+    uint64_t tmp[maxUserCopyVals];
+    tmp[0] = static_cast<uint64_t>(n_strm);
+
+    if(ioctl(fd, IOCTL_SET_N_STRM, &tmp))
+        throw std::runtime_error("ioctl_set_tlb_streams() failed");
+}
+
+// Get the number of streams in usage
+uint32_t bThread::getNStrm() {
+    uint64_t tmp[maxUserCopyVals];
+
+    if(ioctl(fd, IOCTL_GET_N_STRM, &tmp))
+        throw std::runtime_error("ioctl_get_tlb_streams() failed");
+
+    return static_cast<uint32_t>(tmp[0]);
+}
+
 // ======-------------------------------------------------------------------------------
 // Bulk transfers
 // ======-------------------------------------------------------------------------------

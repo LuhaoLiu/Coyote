@@ -38,7 +38,7 @@
 
 // Constants
 #define N_LATENCY_REPS 1
-#define N_THROUGHPUT_REPS 32
+#define N_THROUGHPUT_REPS 1
 
 // Default vFPGA to assign cThreads to; for designs with one region (vFPGA) this is the only possible value
 #define DEFAULT_VFPGA_ID 0
@@ -81,7 +81,6 @@ double run_bench(
         // Recall, coyote_thread->invoke is asynchronous (can be made sync through different sgFlags)
         for (int i = 0; i < transfers; i++) {
             coyote_thread->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg);
-            usleep(20);
         }
 
         // Wait until all of them are finished

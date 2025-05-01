@@ -1,6 +1,6 @@
 /**
   * Copyright (c) 2021-2024, Systems Group, ETH Zurich
-  * All rights reserved.
+  * All erights reserved.
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -51,10 +51,10 @@ double run_bench(
     // Used for keeping track of execution times & some helper functions (mean, P25, P75 etc.)
     coyote::cBench bench(n_runs, n_runs / 10 + 1);
     
-    // Randomly set the source data between -512 and +512; initialise destination memory to 0
+    // Set the source data between -512 and +512; initialise destination memory to 0
     assert(sg.local.src_len == sg.local.dst_len);
     for (int i = 0; i < sg.local.src_len / sizeof(int); i++) {
-        src_mem[i] = rand() % 1024 - 512;     
+        src_mem[i] = i % 1024 - 512;     
         dst_mem[i] = 0;                        
     }
 
@@ -68,15 +68,15 @@ double run_bench(
             coyote_thread->userUnmap((uint8_t *)src_mem + i);
             coyote_thread->userUnmap((uint8_t *)dst_mem + i);
         }
+    };
+
+    // Execute benchmark
+    auto bench_fn = [&]() {
         // Prefault the memory, if required
         if (pre_fault) {
             coyote_thread->userMapComplex(src_mem, sg.local.src_len, stream, tlb_type);
             coyote_thread->userMapComplex(dst_mem, sg.local.dst_len, stream, tlb_type);
         }
-    };
-
-    // Execute benchmark
-    auto bench_fn = [&]() {
         // Launch (queue) multiple transfers in parallel for throughput tests, or 1 in case of latency tests
         // Recall, coyote_thread->invoke is asynchronous (can be made sync through different sgFlags)
         for (int i = 0; i < transfers; i++) {

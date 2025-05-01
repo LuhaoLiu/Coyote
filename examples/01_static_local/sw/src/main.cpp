@@ -38,7 +38,7 @@
 
 // Constants
 #define N_LATENCY_REPS 1
-#define N_THROUGHPUT_REPS 1
+#define N_THROUGHPUT_REPS 32
 
 // Default vFPGA to assign cThreads to; for designs with one region (vFPGA) this is the only possible value
 #define DEFAULT_VFPGA_ID 0
@@ -51,10 +51,10 @@ double run_bench(
     // Used for keeping track of execution times & some helper functions (mean, P25, P75 etc.)
     coyote::cBench bench(n_runs, n_runs / 10 + 1);
     
-    // Randomly set the source data between -512 and +512; initialise destination memory to 0
+    // Set the source data between -512 and +512; initialise destination memory to 0
     assert(sg.local.src_len == sg.local.dst_len);
     for (int i = 0; i < sg.local.src_len / sizeof(int); i++) {
-        src_mem[i] = rand() % 1024 - 512;     
+        src_mem[i] = i % 1024 - 512;     
         dst_mem[i] = 0;                        
     }
 
@@ -68,19 +68,20 @@ double run_bench(
             coyote_thread->userUnmap((uint8_t *)src_mem + i);
             coyote_thread->userUnmap((uint8_t *)dst_mem + i);                 
         }
+    };
+
+    // Execute benchmark
+    auto bench_fn = [&]() {
         // Prefault the memory, if required
         if (pre_fault) {
             coyote_thread->userMap(src_mem, sg.local.src_len);
             coyote_thread->userMap(dst_mem, sg.local.dst_len);
         }
-    };
-
-    // Execute benchmark
-    auto bench_fn = [&]() {
         // Launch (queue) multiple transfers in parallel for throughput tests, or 1 in case of latency tests
         // Recall, coyote_thread->invoke is asynchronous (can be made sync through different sgFlags)
         for (int i = 0; i < transfers; i++) {
             coyote_thread->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg);
+            usleep(20);
         }
 
         // Wait until all of them are finished

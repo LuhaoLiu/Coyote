@@ -68,7 +68,7 @@ double run_bench(
     double avg_time = 0.0;
     for(int j = 0; j < n_runs; j++) {
         // Clear TLB
-        for (int i = 0; i < size; i += 4096) {
+        for (int i = 0; i < size; i += 0x8000) {
             coyote_thread->userUnmap((uint8_t *)mem + i);
         }
         // Pre-fault the memory, if required
@@ -169,6 +169,17 @@ int main(int argc, char *argv[]) {
         // Update size and proceed to next iteration
         curr_size *= 2;
     }
+
+    if (hugepages) {
+        munmap(mem, max_size);
+    } else {
+        free(mem);
+    }
+    for (int i = 0; i < max_size; i += 0x8000) {
+        coyote_thread->userUnmap((uint8_t *)mem + i);
+    }
+    
+
     return EXIT_SUCCESS;
 }
 

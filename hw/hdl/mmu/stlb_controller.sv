@@ -383,7 +383,7 @@ always_comb begin
           // within the valid range
           hit_modify_upd = 1;
           hit_idx_modify_upd = i;
-        end else if (entry_valid_sz[i] != ~0) begin
+        end else if (entry_valid_sz[i] < TLB_SIZE) begin
           // out of valid range by 1: append
           hit_append_upd = 1;
           hit_idx_append_upd = i;

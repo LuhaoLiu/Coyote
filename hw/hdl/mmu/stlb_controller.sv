@@ -64,16 +64,20 @@ localparam integer TLB_VAL_BIT_OFFS = HPID_BITS + PHY_BITS + TAG_BITS + PID_BITS
 localparam integer TLB_SIZE = 2**TLB_ORDER;
 localparam integer TLB_IDX_BITS = $clog2(N_ASSOC);
 
+localparam integer REF_CNT_BITS = 2;
+
 // -- FSM
-typedef enum logic [2:0] {
+typedef enum logic [3:0] {
   ST_IDLE,
+  ST_CHECK_WAIT0,
+  ST_CHECK_WAIT1,
   ST_CHECK,
   ST_NEW_ENTRY,
   ST_MODIFY_PT,
   ST_APPEND_PT,
   ST_DEL_ENTRY
 } state_t;
-logic [2:0] state_C, state_N;
+logic [3:0] state_C, state_N;
 
 // -- Internal
 AXI4S #(.AXI4S_DATA_BITS(AXI_TLB_BITS)) axis_s0 ();
@@ -104,15 +108,12 @@ logic [TLB_IDX_BITS-1:0] hit_idx_append_upd, hit_idx_append_upd_saved;
 logic [TLB_IDX_BITS-1:0] hit_idx_delete_upd, hit_idx_delete_upd_saved;
 
 logic [N_ASSOC_BITS-1:0] entry_insert_fe, entry_insert_se;
-logic [7:0] min_ref_cnt;
 logic filled;
 
 logic [31:0] tmr_clr;
 
 logic hit_lup;
 logic [TLB_IDX_BITS-1:0] hit_idx_lup;
-logic [1:0] hit_lup_saved;
-logic [1:0][TLB_IDX_BITS-1:0] hit_idx_lup_saved;
 logic [1:0] tlb_val_saved;
 logic [1:0][HPID_BITS-1:0] hpid_saved;
 logic [1:0][5-1:0] pg_bits_saved;
@@ -136,13 +137,13 @@ axis_data_fifo_128_tlb inst_data_q (
 
 // TLBs 
 // Registers for TLB entries
-logic [N_ASSOC-1:0][HPID_BITS-1:0]  entry_hpid;
-logic [N_ASSOC-1:0][VIR_BITS-1:0]   entry_vaddr;
-logic [N_ASSOC-1:0][PID_BITS-1:0]   entry_pid;
-logic [N_ASSOC-1:0][STRM_BITS-1:0]  entry_strm;
-logic [N_ASSOC-1:0][TLB_ORDER:0]    entry_valid_sz;
-logic [N_ASSOC-1:0][5-1:0]          entry_pg_bits;
-logic [N_ASSOC-1:0][7:0]            entry_ref_cnt;
+logic [N_ASSOC-1:0][HPID_BITS-1:0]    entry_hpid;
+logic [N_ASSOC-1:0][VIR_BITS-1:0]     entry_vaddr;
+logic [N_ASSOC-1:0][PID_BITS-1:0]     entry_pid;
+logic [N_ASSOC-1:0][STRM_BITS-1:0]    entry_strm;
+logic [N_ASSOC-1:0][TLB_ORDER:0]      entry_valid_sz;
+logic [N_ASSOC-1:0][5-1:0]            entry_pg_bits;
+logic [N_ASSOC-1:0][REF_CNT_BITS-1:0] entry_ref_cnt;
 // BRAM for physical addresses
 for (genvar i = 0; i < N_ASSOC; i++) begin
   // BRAM instantiation
@@ -162,7 +163,9 @@ for (genvar i = 0; i < N_ASSOC; i++) begin
   );
 end
 
+// ------------------------------------------------------
 // REG for TLB entries
+// ------------------------------------------------------
 always_ff @(posedge aclk) begin
   if (aresetn == 1'b0) begin
     for (int i = 0; i < N_ASSOC; i++) begin
@@ -195,10 +198,12 @@ always_ff @(posedge aclk) begin
       end
     end
     // Add ref count by lookup hit
-    if (tlb_val_saved[1] && hit_lup_saved[1]) begin
-      entry_ref_cnt[hit_idx_lup_saved[1]] <= entry_ref_cnt[hit_idx_lup_saved[1]] + 1;
+    if (tlb_val_saved[1] && hit_lup) begin
+      if (entry_ref_cnt[hit_idx_lup] != ~0) begin
+        entry_ref_cnt[hit_idx_lup] <= entry_ref_cnt[hit_idx_lup] + 1;
+      end
       if (tmr_clr == TLB_TMR_REF_CLR) begin
-        entry_ref_cnt[hit_idx_lup_saved[1]] <= (entry_ref_cnt[hit_idx_lup_saved[1]] >> 1) + 1;
+        entry_ref_cnt[hit_idx_lup] <= (entry_ref_cnt[hit_idx_lup] >> 1) + 1;
       end
     end
     // Update TLB entries
@@ -230,7 +235,9 @@ always_ff @(posedge aclk) begin
   end
 end
 
+// ------------------------------------------------------
 // REG
+// ------------------------------------------------------
 always_ff @(posedge aclk) begin
   if (aresetn == 1'b0) begin
     state_C        <= ST_IDLE;
@@ -253,13 +260,21 @@ always_ff @(posedge aclk) begin
   end
 end
 
+// ------------------------------------------------------
 // NSL
+// ------------------------------------------------------
 always_comb begin
   state_N = state_C;
   
   case (state_N)
     ST_IDLE: begin
-      state_N = axis_s0.tvalid ? ST_CHECK : ST_IDLE;
+      state_N = axis_s0.tvalid ? ST_CHECK_WAIT0 : ST_IDLE;
+    end
+    ST_CHECK_WAIT0: begin
+      state_N = ST_CHECK_WAIT1;
+    end
+    ST_CHECK_WAIT1: begin
+      state_N = ST_CHECK;
     end
     ST_CHECK: begin
       if (hit_modify_upd && data_C_valid) begin
@@ -289,7 +304,9 @@ always_comb begin
   endcase
 end
 
+// ------------------------------------------------------
 // DP
+// ------------------------------------------------------
 always_comb begin
   data_N = {16'b0, data_C_pg_bits, data_C_valid, data_C_strm, data_C_pid, data_C_vaddr, data_C_hpid, data_C_paddr};
 
@@ -323,8 +340,14 @@ always_comb begin
         data_N = axis_s0.tdata;
       end
     end
+    ST_CHECK_WAIT0: begin
+      // nothing
+    end
+    ST_CHECK_WAIT1: begin
+      // nothing
+    end
     ST_CHECK: begin
-      // nothing to do with BRAM
+      // nothing
     end
     ST_NEW_ENTRY: begin
       if (!filled) begin
@@ -348,27 +371,56 @@ always_comb begin
 
 end
 
+// ------------------------------------------------------
 // Hit dectection for Update logic
+// ------------------------------------------------------
+// intermediate registers
+logic [N_ASSOC-1:0] hit_modify_upd_array, hit_append_upd_array, hit_delete_upd_array; // cycle 0
+logic [N_ASSOC-1:0] hit_modify_upd_array_saved, hit_append_upd_array_saved, hit_delete_upd_array_saved; // cycle 1
+logic hit_modify_upd_prev, hit_append_upd_prev, hit_delete_upd_prev; // cycle 1
+logic [TLB_IDX_BITS-1:0] hit_idx_modify_upd_prev, hit_idx_append_upd_prev, hit_idx_delete_upd_prev; // cycle 1
 always_ff @(posedge aclk) begin
   if (aresetn == 1'b0) begin
     hit_idx_append_upd_saved <= 0;
     hit_idx_modify_upd_saved <= 0;
     hit_idx_delete_upd_saved <= 0;
+
+    hit_modify_upd_array_saved <= 0;
+    hit_append_upd_array_saved <= 0;
+    hit_delete_upd_array_saved <= 0;
+
+    hit_modify_upd <= 0;
+    hit_append_upd <= 0;
+    hit_delete_upd <= 0;
+
+    hit_idx_modify_upd <= 0;
+    hit_idx_append_upd <= 0;
+    hit_idx_delete_upd <= 0;
   end else begin
     hit_idx_append_upd_saved <= hit_idx_append_upd;
     hit_idx_modify_upd_saved <= hit_idx_modify_upd;
     hit_idx_delete_upd_saved <= hit_idx_delete_upd;
+
+    hit_modify_upd_array_saved <= hit_modify_upd_array;
+    hit_append_upd_array_saved <= hit_append_upd_array;
+    hit_delete_upd_array_saved <= hit_delete_upd_array;
+
+    hit_modify_upd <= hit_modify_upd_prev;
+    hit_append_upd <= hit_append_upd_prev;
+    hit_delete_upd <= hit_delete_upd_prev;
+
+    hit_idx_modify_upd <= hit_idx_modify_upd_prev;
+    hit_idx_append_upd <= hit_idx_append_upd_prev;
+    hit_idx_delete_upd <= hit_idx_delete_upd_prev;
   end
 end
 
+// cycle 0: detect hit per way
 always_comb begin
-  hit_modify_upd = 0;
-  hit_append_upd = 0;
-  hit_delete_upd = 0;
-  hit_idx_modify_upd = 0;
-  hit_idx_append_upd = 0;
-  hit_idx_delete_upd = 0;
-
+  hit_modify_upd_array = 0;
+  hit_append_upd_array = 0;
+  hit_delete_upd_array = 0;
+  
   for (int i = 0; i < N_ASSOC; i++) begin
     if (
       vaddr_diff_upd[i] <= entry_valid_sz[i] && data_C_vaddr >= entry_vaddr[i] && // vaddr match
@@ -381,72 +433,170 @@ always_comb begin
         // full hit: new tlb
         if (vaddr_diff_upd[i] < entry_valid_sz[i]) begin
           // within the valid range
-          hit_modify_upd = 1;
-          hit_idx_modify_upd = i;
+          hit_modify_upd_array[i] = 1;
         end else if (entry_valid_sz[i] < TLB_SIZE) begin
           // out of valid range by 1: append
-          hit_append_upd = 1;
-          hit_idx_append_upd = i;
+          hit_append_upd_array[i] = 1;
         end
       end
       // partial hit: delete tlb
       if (vaddr_diff_upd[i] < entry_valid_sz[i]) begin
         // within the valid range
-        hit_delete_upd = 1;
-        hit_idx_delete_upd = i;
+        hit_delete_upd_array[i] = 1;
       end
     end
   end
 end
+// cycle 1: detect hit idx
+always_comb begin
+  hit_modify_upd_prev = hit_modify_upd_array_saved == 0 ? 0 : 1;
+  hit_append_upd_prev = hit_append_upd_array_saved == 0 ? 0 : 1;
+  hit_delete_upd_prev = hit_delete_upd_array_saved == 0 ? 0 : 1;
 
+  hit_idx_modify_upd_prev = 0;
+  hit_idx_append_upd_prev = 0;
+  hit_idx_delete_upd_prev = 0;
+
+  for (int i = 0; i < N_ASSOC; i++) begin
+    if (hit_modify_upd_array_saved[i]) begin
+      hit_idx_modify_upd_prev = i;
+    end
+    if (hit_append_upd_array_saved[i]) begin
+      hit_idx_append_upd_prev = i;
+    end
+    if (hit_delete_upd_array_saved[i]) begin
+      hit_idx_delete_upd_prev = i;
+    end
+  end
+end
+
+// ------------------------------------------------------
 // Hit dectection for TLB Lookup logic
+// ------------------------------------------------------
+// intermediate registers
+logic [N_ASSOC-1:0] hit_lup_array, hit_lup_array_saved; // cycle 0 -> 1
+logic hit_lup_prev; // cycle 1
+logic [TLB_IDX_BITS-1:0] hit_idx_lup_prev; // cycle 1
 always_ff @(posedge aclk) begin
   if (aresetn == 1'b0) begin
-    hit_lup_saved     <= 0;
-    hit_idx_lup_saved <= 0;
     tlb_val_saved     <= 0;
     hpid_saved        <= 0;
     pg_bits_saved     <= 0;
+
+    hit_lup_array_saved <= 0;
+    hit_lup             <= 0;
+    hit_idx_lup         <= 0;
   end else begin
-    hit_lup_saved[0]     <= hit_lup;
-    hit_idx_lup_saved[0] <= hit_idx_lup;
     tlb_val_saved[0]     <= TLB.valid;
     hpid_saved[0]        <= entry_hpid[hit_idx_lup];
     pg_bits_saved[0]     <= entry_pg_bits[hit_idx_lup];
 
-    hit_lup_saved[1]     <= hit_lup_saved[0];
-    hit_idx_lup_saved[1] <= hit_idx_lup_saved[0];
     tlb_val_saved[1]     <= tlb_val_saved[0];
     hpid_saved[1]        <= hpid_saved[0];
     pg_bits_saved[1]     <= pg_bits_saved[0];
+
+    hit_lup_array_saved  <= hit_lup_array;
+    hit_lup              <= hit_lup_prev;
+    hit_idx_lup          <= hit_idx_lup_prev;
   end
 end
 
+// cycle 0: detect hit per way
 always_comb begin
-  hit_lup = 0;
-  hit_idx_lup = 0;
-
+  hit_lup_array = 0;
   for (int i = 0; i < N_ASSOC; i++) begin
     if (
       vaddr_diff_lup[i] < entry_valid_sz[i] && tlb_addr_s >= entry_vaddr[i] && // vaddr match
       TLB.pid == entry_pid[i] && // pid match
       TLB.strm == entry_strm[i] // strm match
     ) begin
-      hit_lup = 1;
-      hit_idx_lup = i;
+      hit_lup_array[i] = 1;
+    end
+  end
+end
+// cycle 1: detect hit idx
+always_comb begin
+  hit_lup_prev = hit_lup_array_saved == 0 ? 0 : 1;
+  hit_idx_lup_prev = 0;
+
+  for (int i = 0; i < N_ASSOC; i++) begin
+    if (hit_lup_array_saved[i]) begin
+      hit_idx_lup_prev = i;
     end
   end
 end
 
-// First Update Order
-always_comb begin   
-  filled = 1'b1;
-  entry_insert_fe = 0;
+// ------------------------------------------------------
+// Update Order
+// ------------------------------------------------------
+// intermediate registers
+logic [3:0] filled_quater, filled_quater_saved; // cycle 0 -> 1
+logic [3:0][TLB_IDX_BITS-1:0] entry_insert_fe_quater, entry_insert_fe_quater_saved; // cycle 0 -> 1
+logic filled_prev; // cycle 1
+logic [TLB_IDX_BITS-1:0] entry_insert_fe_prev; // cycle 1
+logic [3:0][REF_CNT_BITS-1:0] min_ref_cnt_quater, min_ref_cnt_quater_saved; // cycle 0 -> 1
+logic [3:0][TLB_IDX_BITS-1:0] entry_insert_se_quater, entry_insert_se_quater_saved; // cycle 0 -> 1
+logic [REF_CNT_BITS-1:0] min_ref_cnt; // cycle 1
+logic [TLB_IDX_BITS-1:0] entry_insert_se_prev; // cycle 1
+always_ff @(posedge aclk) begin
+  if (aresetn == 1'b0) begin
+    filled          <= 0;
+    entry_insert_fe <= 0;
+    entry_insert_se <= 0;
 
-  for(int i = 0; i < N_ASSOC; i++) begin
+    filled_quater_saved          <= 0;
+    entry_insert_fe_quater_saved <= 0;
+    min_ref_cnt_quater_saved     <= 0;
+    entry_insert_se_quater_saved <= 0;
+  end else begin
+    filled          <= filled_prev;
+    entry_insert_fe <= entry_insert_fe_prev;
+    entry_insert_se <= entry_insert_se_prev;
+
+    filled_quater_saved          <= filled_quater;
+    entry_insert_fe_quater_saved <= entry_insert_fe_quater;
+    min_ref_cnt_quater_saved     <= min_ref_cnt_quater;
+    entry_insert_se_quater_saved <= entry_insert_se_quater;
+  end
+end
+// First Update Order
+always_comb begin
+  filled_quater = ~0;
+  entry_insert_fe_quater = 0;
+
+  for(int i = 0; i < N_ASSOC/4; i++) begin
     if (entry_valid_sz[i] == 0) begin
-      filled = 1'b0;
-      entry_insert_fe = i;
+      filled_quater[0] = 1'b0;
+      entry_insert_fe_quater[0] = i;
+    end
+  end
+  for(int i = N_ASSOC/4; i < N_ASSOC/2; i++) begin
+    if (entry_valid_sz[i] == 0) begin
+      filled_quater[1] = 1'b0;
+      entry_insert_fe_quater[1] = i;
+    end
+  end
+  for(int i = N_ASSOC/2; i < 3*N_ASSOC/4; i++) begin
+    if (entry_valid_sz[i] == 0) begin
+      filled_quater[2] = 1'b0;
+      entry_insert_fe_quater[2] = i;
+    end
+  end
+  for(int i = 3*N_ASSOC/4; i < N_ASSOC; i++) begin
+    if (entry_valid_sz[i] == 0) begin
+      filled_quater[3] = 1'b0;
+      entry_insert_fe_quater[3] = i;
+    end
+  end
+end
+always_comb begin
+  filled_prev = 1'b1;
+  entry_insert_fe_prev = 0;
+
+  for(int i = 0; i < 4; i++) begin
+    if (filled_quater_saved[i] == 0) begin
+      filled_prev = 1'b0;
+      entry_insert_fe_prev = entry_insert_fe_quater_saved[i];
       break;
     end
   end
@@ -454,18 +604,49 @@ end
 
 // Second Update Order
 always_comb begin
-  entry_insert_se = 0;
-  min_ref_cnt = 8'hFF;
+  min_ref_cnt_quater = ~0;
+  entry_insert_se_quater = 0;
 
-  for(int i = 0; i < N_ASSOC; i++) begin
-    if (entry_ref_cnt[i] <= min_ref_cnt) begin
-      min_ref_cnt = entry_ref_cnt[i];
-      entry_insert_se = i;
+  for(int i = 0; i < N_ASSOC/4; i++) begin
+    if (entry_ref_cnt[i] <= min_ref_cnt_quater[0]) begin
+      min_ref_cnt_quater[0] = entry_ref_cnt[i];
+      entry_insert_se_quater[0] = i;
+    end
+  end
+  for(int i = N_ASSOC/4; i < N_ASSOC/2; i++) begin
+    if (entry_ref_cnt[i] <= min_ref_cnt_quater[1]) begin
+      min_ref_cnt_quater[1] = entry_ref_cnt[i];
+      entry_insert_se_quater[1] = i;
+    end
+  end
+  for(int i = N_ASSOC/2; i < 3*N_ASSOC/4; i++) begin
+    if (entry_ref_cnt[i] <= min_ref_cnt_quater[2]) begin
+      min_ref_cnt_quater[2] = entry_ref_cnt[i];
+      entry_insert_se_quater[2] = i;
+    end
+  end
+  for(int i = 3*N_ASSOC/4; i < N_ASSOC; i++) begin
+    if (entry_ref_cnt[i] <= min_ref_cnt_quater[3]) begin
+      min_ref_cnt_quater[3] = entry_ref_cnt[i];
+      entry_insert_se_quater[3] = i;
+    end
+  end
+end
+always_comb begin
+  min_ref_cnt = ~0;
+  entry_insert_se_prev = 0;
+  
+  for(int i = 0; i < 4; i++) begin
+    if (min_ref_cnt_quater_saved[i] <= min_ref_cnt) begin
+      min_ref_cnt = min_ref_cnt_quater_saved[i];
+      entry_insert_se_prev = entry_insert_se_quater_saved[i];
     end
   end
 end
 
+// ------------------------------------------------------
 // TLB Addr selection by page size
+// ------------------------------------------------------
 always_comb begin
   tlb_addr_s = 0;
   tlb_addr_l = 0;
@@ -475,7 +656,9 @@ always_comb begin
   tlb_addr_h = TLB.addr[VADDR_BITS-1:30];
 end
 
+// ------------------------------------------------------
 // Output
+// ------------------------------------------------------
 always_ff @(posedge aclk) begin
   if (aresetn == 1'b0) begin
     pg_bits <= 0;
@@ -483,18 +666,18 @@ always_ff @(posedge aclk) begin
     TLB.data <= 0;
   end else begin
     pg_bits <= pg_bits_saved[1];
-    TLB.hit <= hit_lup_saved[1];
+    TLB.hit <= hit_lup;
     TLB.data <= 0;
     TLB.data[0 +: HPID_BITS] <= hpid_saved[1];
-    TLB.data[HPID_BITS +: PHY_BITS] <= pt_data_lup[hit_idx_lup_saved[1]];
-    TLB.data[TLB_VAL_BIT_OFFS] <= hit_lup_saved[1];
+    TLB.data[HPID_BITS +: PHY_BITS] <= pt_data_lup[hit_idx_lup];
+    TLB.data[TLB_VAL_BIT_OFFS] <= hit_lup;
   end
 end
 
 /////////////////////////////////////////////////////////////////////////////
 // DEBUG
 /////////////////////////////////////////////////////////////////////////////
-`define DBG_STLB_CONTROLLER
+// `define DBG_STLB_CONTROLLER
 `ifdef DBG_STLB_CONTROLLER
 
 wire ila_axis_s0_tvalid;

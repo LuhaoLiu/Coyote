@@ -108,7 +108,8 @@ logic [2:0] next_engine; // the next engine id to submit a request to
 logic engine_submitted; // if a request was submitted to the next engine
 logic [3:0] done_number; // number of engines that have completed their requests
 always_comb begin
-    next_acceptable = engine_busy_array == ~0 ? 1'b0 : 1'b1;
+    next_acceptable = (engine_busy_array == {N_STRM_AXI{1'b1}}) ? 1'b0 : 1'b1;
+    next_engine = 0;
     for (int j = 0; j < N_STRM_AXI; j++) begin
         if (engine_busy_array[j] == 1'b0) begin
             next_engine = j;
@@ -188,12 +189,12 @@ always_ff @(posedge aclk) begin
             end
             ST_REQ_SUBMIT_B: begin
                 if (bench_req_ctrl == 2'b01) begin // Read request
-                    if (cq_rd.valid && cq_rd.ready) begin
+                    if (sq_rd.valid && sq_rd.ready) begin
                         state_C <= ST_RUNNING;
                         engine_submitted <= 1'b0; // reset the flag for the next request to the engine
                     end
                 end else if (bench_req_ctrl == 2'b10) begin // Write request
-                    if (cq_wr.valid && cq_wr.ready) begin
+                    if (sq_wr.valid && sq_wr.ready) begin
                         state_C <= ST_RUNNING;
                         engine_submitted <= 1'b0;
                     end
@@ -230,8 +231,8 @@ always_comb begin
     sq_rd.data = 0;
     sq_rd.data.last = 1'b1;
     sq_rd.data.pid = bench_req_pid;
-    sq_rd.data.len = state_C == ST_REQ_SUBMIT_A ? bench_req_len_A : bench_req_len_B;
-    sq_rd.data.vaddr = state_C == ST_REQ_SUBMIT_A ? bench_req_vaddr_A : bench_req_vaddr_B;
+    sq_rd.data.len = (state_C == ST_REQ_SUBMIT_A) ? bench_req_len_A : bench_req_len_B;
+    sq_rd.data.vaddr = (state_C == ST_REQ_SUBMIT_A) ? bench_req_vaddr_A : bench_req_vaddr_B;
     sq_rd.data.strm = STRM_HOST;
     sq_rd.data.opcode = LOCAL_READ;
     sq_rd.data.dest = next_engine_reg;
@@ -246,8 +247,8 @@ always_comb begin
     sq_wr.data = 0;
     sq_wr.data.last = 1'b1;
     sq_wr.data.pid = bench_req_pid;
-    sq_wr.data.len = state_C == ST_REQ_SUBMIT_A ? bench_req_len_A : bench_req_len_B;
-    sq_wr.data.vaddr = state_C == ST_REQ_SUBMIT_A ? bench_req_vaddr_A : bench_req_vaddr_B;
+    sq_wr.data.len = (state_C == ST_REQ_SUBMIT_A) ? bench_req_len_A : bench_req_len_B;
+    sq_wr.data.vaddr = (state_C == ST_REQ_SUBMIT_A) ? bench_req_vaddr_A : bench_req_vaddr_B;
     sq_wr.data.strm = STRM_HOST;
     sq_wr.data.opcode = LOCAL_WRITE;
     sq_wr.data.dest = next_engine_reg;
@@ -259,3 +260,27 @@ end
 
 // Tie off unused interfaces
 always_comb notify.tie_off_m();
+
+ila_perf_fpga_compliated inst_ila_perf_fpga_compliated (
+    .clk(aclk),
+    .probe0(bench_req_ctrl), // 2
+    .probe1(bench_reset), // 1
+    .probe2(bench_n_reps), // 32
+    .probe3(bench_done), // 32
+    .probe4(bench_req_n_beats), // 64
+    .probe5(bench_req_len_A), // LEN_BITS = 28
+    .probe6(bench_req_len_B), // LEN_BITS = 28
+    .probe7(bench_req_vaddr_A), // VADDR_BITS = 48
+    .probe8(bench_req_vaddr_B), // VADDR_BITS = 48
+    .probe9(bench_req_pid), // PID_BITS = 6
+    .probe10(bench_timer), // 64
+    .probe11(state_C), // 3
+    .probe12(req_accepted), // 1
+    .probe13(engine_busy_array), // N_STRM_AXI = 4
+    .probe14(engine_done_array), // N_STRM_AXI = 4
+    .probe15(next_acceptable), // 1
+    .probe16(next_engine), // 3
+    .probe17(next_engine_reg), // 3
+    .probe18(engine_submitted), // 1
+    .probe19(done_number) // 4
+);

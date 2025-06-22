@@ -38,8 +38,11 @@ always_ff @(posedge aclk) begin
         busy <= busy;
         done <= 1'b0;
 
+        req_type_reg <= req_type_reg;
+        n_beats_reg <= n_beats_reg;
+
         // Start
-        if (!busy && req_type != 0) begin
+        if (!busy && (req_type == 2'b01 || req_type == 2'b10)) begin
             busy <= 1'b1;
             req_type_reg <= req_type;
             n_beats_reg <= n_beats;
@@ -52,7 +55,7 @@ always_ff @(posedge aclk) begin
                 // Read data from input stream
                 n_beats_reg <= n_beats_reg - 1;
             end
-        end else begin // Write
+        end else if (req_type_reg == 2'b10) begin // Write
             // Process write request
             if (axis_out.tvalid && axis_out.tready) begin
                 // Write data to output stream
@@ -61,11 +64,12 @@ always_ff @(posedge aclk) begin
         end
 
         // Finish
-        if (n_beats_reg == 0) begin
-            done <= 1'b1;
+        if ((req_type_reg == 2'b01 || req_type_reg == 2'b10) && n_beats_reg == 0) begin
             busy <= 1'b0;
+            done <= 1'b1;
 
             req_type_reg <= 2'b0;
+            n_beats_reg <= 64'b0;
         end
 
     end

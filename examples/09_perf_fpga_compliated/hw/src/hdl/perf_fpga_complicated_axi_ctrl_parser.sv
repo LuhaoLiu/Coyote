@@ -182,8 +182,26 @@ always_ff @(posedge aclk) begin
       axi_rdata <= 0;
 
       case (axi_araddr[ADDR_LSB+:ADDR_MSB])
+        BENCH_RESET_REG:     // Benchmark reset
+          axi_rdata[0] <= ctrl_reg[BENCH_RESET_REG][0];
+        BENCH_N_REPS_REG:    // Number of total requests
+          axi_rdata[31:0] <= ctrl_reg[BENCH_N_REPS_REG][31:0];
         BENCH_DONE_REG:   // Number of completions
           axi_rdata[31:0] <= bench_done;
+        BENCH_REQ_CTRL_REG:  // Request type
+          axi_rdata[1:0] <= ctrl_reg[BENCH_REQ_CTRL_REG][1:0];
+        BENCH_REQ_N_BEATS_REG: // Request N beats
+          axi_rdata[63:0] <= ctrl_reg[BENCH_REQ_N_BEATS_REG][63:0];
+        BENCH_REQ_LEN_A_REG: // Request length A
+          axi_rdata[LEN_BITS-1:0] <= ctrl_reg[BENCH_REQ_LEN_A_REG][LEN_BITS-1:0];
+        BENCH_REQ_LEN_B_REG: // Request length B
+          axi_rdata[LEN_BITS-1:0] <= ctrl_reg[BENCH_REQ_LEN_B_REG][LEN_BITS-1:0];
+        BENCH_REQ_VADDR_A_REG: // Request virtual address A
+          axi_rdata[VADDR_BITS-1:0] <= ctrl_reg[BENCH_REQ_VADDR_A_REG][VADDR_BITS-1:0];
+        BENCH_REQ_VADDR_B_REG: // Request virtual address B
+          axi_rdata[VADDR_BITS-1:0] <= ctrl_reg[BENCH_REQ_VADDR_B_REG][VADDR_BITS-1:0];
+        BENCH_REQ_PID_REG: // Request PID
+          axi_rdata[PID_BITS-1:0] <= ctrl_reg[BENCH_REQ_PID_REG][PID_BITS-1:0];
         BENCH_TIMER_REG:  // Benchmark timer
           axi_rdata <= bench_timer;
         default: ;

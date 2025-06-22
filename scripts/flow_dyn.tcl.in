@@ -74,7 +74,7 @@ if {$cfg(build_opt) eq 1} {
 
 write_checkpoint -force "$dcp_dir/config_0/shell_routed_c0.dcp"
 
-report_utilization -file "$rprt_dir/config_0/shell_utilization_c0.rpt"
+report_utilization -hierarchical -file "$rprt_dir/config_0/shell_utilization_c0.rpt"
 report_route_status -file "$rprt_dir/config_0/shell_route_status_c0.rpt"
 report_timing_summary -file "$rprt_dir/config_0/shell_timing_summary_c0.rpt"
 report_drc -ruledeck bitstream_checks -name cyt_top -file "$rprt_dir/config_0/shell_drc_bitstream_checks_c0.rpt"
@@ -153,7 +153,7 @@ for {set i 1}  {$i < $cfg(n_config)} {incr i} {
 
     write_checkpoint -force "$dcp_dir/config_$i/shell_routed_c$i.dcp"
 
-    report_utilization -file "$rprt_dir/config_$i/shell_utilization_c$i.rpt"
+    report_utilization -hierarchical -file "$rprt_dir/config_$i/shell_utilization_c$i.rpt"
     report_route_status -file "$rprt_dir/config_$i/shell_route_status_c$i.rpt"
     report_timing_summary -file "$rprt_dir/config_$i/shell_timing_summary_c$i.rpt"
     report_drc -ruledeck bitstream_checks -name cyt_top -file "$rprt_dir/config_$i/shell_drc_bitstream_checks_c$i.rpt"

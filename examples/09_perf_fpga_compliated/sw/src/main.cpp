@@ -36,12 +36,31 @@ enum class BenchmarkOperation: uint8_t {
     START_WR = 0x2
 };
 
+void print_regs(std::unique_ptr<coyote::cThread<std::any>> &coyote_thread, char *header) {
+    std::cout << "-----" << header << "-----" << std::endl;
+    std::cout << "RESET_REG:       " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::RESET_REG)) << std::endl;
+    std::cout << "N_REPS_REG:      " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::N_REPS_REG)) << std::endl;
+    std::cout << "DONE_REG:        " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::DONE_REG)) << std::endl;
+    std::cout << "REQ_CTRL_REG:    " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_CTRL_REG)) << std::endl;
+    std::cout << "REQ_N_BEATS_REG: " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_N_BEATS_REG)) << std::endl;
+    std::cout << "REQ_LEN_A_REG:   " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_LEN_A_REG)) << std::endl;
+    std::cout << "REQ_LEN_B_REG:   " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_LEN_B_REG)) << std::endl;
+    std::cout << "REQ_VADDR_A_REG: " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_VADDR_A_REG)) << std::endl;
+    std::cout << "REQ_VADDR_B_REG: " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_VADDR_B_REG)) << std::endl;
+    std::cout << "REQ_PID_REG:     " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_PID_REG)) << std::endl;
+    std::cout << "TIMER_REG:       " << coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::TIMER_REG)) << std::endl;
+    std::cout << std::endl;
+}
+
 double run_bench(
     std::unique_ptr<coyote::cThread<std::any>> &coyote_thread, 
     unsigned int size_a, int* mem_a[4],
     unsigned int size_b, int* mem_b[4],
     unsigned int n_reps, unsigned int n_runs, BenchmarkOperation oper, bool mapped
 ) {
+    // printf("Running benchmark with %s operation, %u runs, %u repetitions, size A: %u, size B: %u, mapped: %d\n", 
+    //        (oper == BenchmarkOperation::START_RD ? "READ" : "WRITE"), n_runs, n_reps, size_a, size_b, mapped);
+
     // Randomly initialise the data
     for (int i = 0; i < size_a / sizeof(int); i++) {
         for (int j = 0; j < 4; ++j) {
@@ -56,15 +75,21 @@ double run_bench(
 
     // Single iteration of transfers reads or writes
     auto benchmark_run = [&]() {
-        // Set the required registers from SW
-        uint64_t n_beats = n_reps * (((size_a + 64 - 1) / 64) + ((size_b + 64 - 1) / 64));
+        // print_regs(coyote_thread, "Before RESET");
 
         // Reset the benchmark
-        coyote_thread->setCSR(static_cast<uint32_t>(BenchmarkRegisters::RESET_REG), 1);
+        coyote_thread->setCSR(1, static_cast<uint32_t>(BenchmarkRegisters::RESET_REG));
         while (coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::RESET_REG)) != 0) {}
+
+        // print_regs(coyote_thread, "After RESET");
 
         // Set the number of transfers to perform
         coyote_thread->setCSR(n_reps, static_cast<uint32_t>(BenchmarkRegisters::N_REPS_REG));
+
+        // print_regs(coyote_thread, "After N_REPS_REG");
+
+        // Calculate the number of beats required per operation
+        uint64_t n_beats = ((size_a + 64 - 1) / 64) + ((size_b + 64 - 1) / 64);
 
         for (int i = 0; i < n_reps; ++i) {
             // Set n_beats
@@ -77,15 +102,21 @@ double run_bench(
             coyote_thread->setCSR((uint64_t) mem_b[i % 4], static_cast<uint32_t>(BenchmarkRegisters::REQ_VADDR_B_REG));
 
             // Set the process ID
-            coyote_thread->setCSR(getpid(), static_cast<uint32_t>(BenchmarkRegisters::REQ_PID_REG));
+            coyote_thread->setCSR(coyote_thread->getCtid(), static_cast<uint32_t>(BenchmarkRegisters::REQ_PID_REG));
+
+            // print_regs(coyote_thread, "Before REQ_CTRL_REG");
 
             // Set the operation type and start
             coyote_thread->setCSR(static_cast<uint32_t>(oper), static_cast<uint32_t>(BenchmarkRegisters::REQ_CTRL_REG));
             while (coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::REQ_CTRL_REG)) != 0) {}
+
+            // print_regs(coyote_thread, "After REQ_CTRL_REG");
         }
         
         // Wait until done register is asserted high
         while (coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::DONE_REG)) < n_reps) {}
+
+        // print_regs(coyote_thread, "After DONE_REG");
 
         // Read from time register and convert to ns
         return (double) coyote_thread->getCSR(static_cast<uint32_t>(BenchmarkRegisters::TIMER_REG)) * (double) CLOCK_PERIOD_NS;
@@ -107,17 +138,25 @@ double run_bench(
         }
         // Pre-fault the memory, if required
         if (mapped) {
-            for (int j = 4; j < 4; ++j) {
+            for (int j = 0; j < 4; ++j) {
+                // printf("Pre-faulting memory A[%d]:%p and B[%d]:%p\n", j, mem_a[j], j, mem_b[j]);
                 coyote_thread->userMapComplex(mem_a[j], size_a, true, 1);
                 coyote_thread->userMapComplex(mem_b[j], size_b, true, 0);
-            }   
+            }
         }
+
+        // printf("Pre-process finished, starting RUN No.%d\n", k);
+        // while (getchar() != '\n');
+
         // Run the benchmark
         double tmp_time = benchmark_run();
 #ifdef DETAIL_REPORT
         std::cout << tmp_time << ", ";
 #endif
         avg_time += tmp_time;
+
+        // printf("Benchmark finished\n");
+        // while (getchar() != '\n');
     }
     
 #ifdef DETAIL_REPORT
@@ -167,8 +206,13 @@ int main(int argc, char *argv[]) {
         new coyote::cThread<std::any>(DEFAULT_VFPGA_ID, getpid(), 0)
     );
     
-    // We need use one stream for this benchmark
+    // We need 4 stream for this benchmark
     coyote_thread->setNStrm(4);
+    if (hugepages) {
+        coyote_thread->setDTlbPgsize(21);
+    } else {
+        coyote_thread->setDTlbPgsize(12);
+    }
 
     int* mem_a[4];
     int* mem_b[4];

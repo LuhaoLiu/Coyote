@@ -8,14 +8,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Software &mdash; Coyote v0.2.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=cc40f7fa"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -49,6 +49,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../intro/overview.html">System overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../intro/features.html">Features</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../intro/quick-start.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../intro/v80-notes.html">V80 notes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../intro/faq.html">Frequently asked questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../intro/publications.html">Citation and publications</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../intro/release-notes.html">Release notes</a></li>
@@ -74,6 +75,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#_CPPv4N6coyote6cBenchE"><code class="docutils literal notranslate"><span class="pre">coyote::cBench</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote6cBench6cBenchEjj"><code class="docutils literal notranslate"><span class="pre">cBench()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4I0Dp0DpEN6coyote6cBench7executeEvRK9BenchFuncDp9BenchArgsRK8PrepFuncDp8PrepArgs"><code class="docutils literal notranslate"><span class="pre">execute()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote6cBench6getAllEv"><code class="docutils literal notranslate"><span class="pre">getAll()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote6cBench6getAvgEv"><code class="docutils literal notranslate"><span class="pre">getAvg()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote6cBench6getMinEv"><code class="docutils literal notranslate"><span class="pre">getMin()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote6cBench6getMaxEv"><code class="docutils literal notranslate"><span class="pre">getMax()</span></code></a></li>
@@ -125,6 +127,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote11CoyoteAlloc6remoteE"><code class="docutils literal notranslate"><span class="pre">remote</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote11CoyoteAlloc10gpu_dev_idE"><code class="docutils literal notranslate"><span class="pre">gpu_dev_id</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote11CoyoteAlloc13gpu_dmabuf_fdE"><code class="docutils literal notranslate"><span class="pre">gpu_dmabuf_fd</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote11CoyoteAlloc9mem_blockE"><code class="docutils literal notranslate"><span class="pre">mem_block</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote11CoyoteAlloc3memE"><code class="docutils literal notranslate"><span class="pre">mem</span></code></a></li>
 </ul>
 </li>
@@ -230,9 +233,11 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#_CPPv4N6coyote7cThreadE"><code class="docutils literal notranslate"><span class="pre">coyote::cThread</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread11doArpLookupE8uint32_t"><code class="docutils literal notranslate"><span class="pre">doArpLookup()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread14writeQpContextE8uint32_t"><code class="docutils literal notranslate"><span class="pre">writeQpContext()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7cThreadE7int32_t5pid_t8uint32_tNSt8functionIFviEEE"><code class="docutils literal notranslate"><span class="pre">cThread()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThreadD0Ev"><code class="docutils literal notranslate"><span class="pre">~cThread()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7userMapEPv8uint32_t"><code class="docutils literal notranslate"><span class="pre">userMap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t"><code class="docutils literal notranslate"><span class="pre">userMap()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread9userUnmapEPv"><code class="docutils literal notranslate"><span class="pre">userUnmap()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread6getMemERR11CoyoteAlloc"><code class="docutils literal notranslate"><span class="pre">getMem()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7freeMemEPv"><code class="docutils literal notranslate"><span class="pre">freeMem()</span></code></a></li>
@@ -253,14 +258,13 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread7getVfidEv"><code class="docutils literal notranslate"><span class="pre">getVfid()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread7getCtidEv"><code class="docutils literal notranslate"><span class="pre">getCtid()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread7getHpidEv"><code class="docutils literal notranslate"><span class="pre">getHpid()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread8getQpairEv"><code class="docutils literal notranslate"><span class="pre">getQpair()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread10printDebugEv"><code class="docutils literal notranslate"><span class="pre">printDebug()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8mmapFpgaEv"><code class="docutils literal notranslate"><span class="pre">mmapFpga()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread10munmapFpgaEv"><code class="docutils literal notranslate"><span class="pre">munmapFpga()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7postCmdE8uint64_t8uint64_t8uint64_t8uint64_t"><code class="docutils literal notranslate"><span class="pre">postCmd()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7sendAckE8uint32_t"><code class="docutils literal notranslate"><span class="pre">sendAck()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7readAckEv"><code class="docutils literal notranslate"><span class="pre">readAck()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread11doArpLookupE8uint32_t"><code class="docutils literal notranslate"><span class="pre">doArpLookup()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread14writeQpContextE8uint32_t"><code class="docutils literal notranslate"><span class="pre">writeQpContext()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread2fdE"><code class="docutils literal notranslate"><span class="pre">fd</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread4vfidE"><code class="docutils literal notranslate"><span class="pre">vfid</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread4ctidE"><code class="docutils literal notranslate"><span class="pre">ctid</span></code></a></li>
@@ -280,6 +284,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread12is_connectedE"><code class="docutils literal notranslate"><span class="pre">is_connected</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread5vlockE"><code class="docutils literal notranslate"><span class="pre">vlock</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread13lock_acquiredE"><code class="docutils literal notranslate"><span class="pre">lock_acquired</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread16additional_stateE"><code class="docutils literal notranslate"><span class="pre">additional_state</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#_CPPv4N6coyote7localSgE"><code class="docutils literal notranslate"><span class="pre">coyote::localSg</span></code></a><ul>
@@ -462,6 +467,12 @@
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote6cBench6getAllEv">
+<span id="_CPPv3N6coyote6cBench6getAllEv"></span><span id="_CPPv2N6coyote6cBench6getAllEv"></span><span id="coyote::cBench::getAll"></span><span class="target" id="classcoyote_1_1cBench_1a999c45a0384dcfd740c5c0e1131c5058"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getAll</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote6cBench6getAllEv" title="Link to this definition"></a><br /></dt>
+<dd><p>Returns all recorded execution times as a vector. </p>
 </dd></dl>
 
 <dl class="cpp function">
@@ -886,6 +897,12 @@
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote11CoyoteAlloc13gpu_dmabuf_fdE">
 <span id="_CPPv3N6coyote11CoyoteAlloc13gpu_dmabuf_fdE"></span><span id="_CPPv2N6coyote11CoyoteAlloc13gpu_dmabuf_fdE"></span><span id="coyote::CoyoteAlloc::gpu_dmabuf_fd__int32_t"></span><span class="target" id="structcoyote_1_1CoyoteAlloc_1a8038f5d09dc7d082ae33e386e797cb0b"></span><span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">gpu_dmabuf_fd</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote11CoyoteAlloc13gpu_dmabuf_fdE" title="Link to this definition"></a><br /></dt>
 <dd><p>File descriptor for the DMABuff used for GPU memory. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote11CoyoteAlloc9mem_blockE">
+<span id="_CPPv3N6coyote11CoyoteAlloc9mem_blockE"></span><span id="_CPPv2N6coyote11CoyoteAlloc9mem_blockE"></span><span id="coyote::CoyoteAlloc::mem_block__int32_t"></span><span class="target" id="structcoyote_1_1CoyoteAlloc_1a28384225d64639ead6e4ae34b4d56f64"></span><span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">mem_block</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="o"><span class="pre">-</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote11CoyoteAlloc9mem_blockE" title="Link to this definition"></a><br /></dt>
+<dd><p>Target memory block on the card; only applicable to Versal devices; otherwise ignored TODO: Add a pointer to some docs, once available </p>
 </dd></dl>
 
 <dl class="cpp var">
@@ -1727,6 +1744,28 @@ TODO:<ul class="simple">
 <div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread11doArpLookupE8uint32_t">
+<span id="_CPPv3N6coyote7cThread11doArpLookupE8uint32_t"></span><span id="_CPPv2N6coyote7cThread11doArpLookupE8uint32_t"></span><span id="coyote::cThread::doArpLookup__uint32_t"></span><span class="target" id="classcoyote_1_1cThread_1a5eaf1b0217265dc8441af9566b64dfbf"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">doArpLookup</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">ip_addr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread11doArpLookupE8uint32_t" title="Link to this definition"></a><br /></dt>
+<dd><p>Writes an IP address to a config register so it can be used for ARP lookup. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ip_addr</strong> – IP address to be looked up </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread14writeQpContextE8uint32_t">
+<span id="_CPPv3N6coyote7cThread14writeQpContextE8uint32_t"></span><span id="_CPPv2N6coyote7cThread14writeQpContextE8uint32_t"></span><span id="coyote::cThread::writeQpContext__uint32_t"></span><span class="target" id="classcoyote_1_1cThread_1a96243043753d3de764f8a4a527b07726"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">writeQpContext</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">port</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread14writeQpContextE8uint32_t" title="Link to this definition"></a><br /></dt>
+<dd><p>Writes the exchanged QP information to the vFPGA config registers. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ip_addr</strong> – IP address to be looked up </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread7cThreadE7int32_t5pid_t8uint32_tNSt8functionIFviEEE">
 <span id="_CPPv3N6coyote7cThread7cThreadE7int32_t5pid_t8uint32_tNSt8functionIFviEEE"></span><span id="_CPPv2N6coyote7cThread7cThreadE7int32_t5pid_t8uint32_tNSt8functionIFviEEE"></span><span class="target" id="classcoyote_1_1cThread_1a76ed6bd35d3ad2a9a87be1faac2dfad0"></span><span class="sig-name descname"><span class="n"><span class="pre">cThread</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">vfid</span></span>, <span class="n"><span class="pre">pid_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">hpid</span></span>, <span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">device</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">(</span></span><span class="kt"><span class="pre">int</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">uisr</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread7cThreadE7int32_t5pid_t8uint32_tNSt8functionIFviEEE" title="Link to this definition"></a><br /></dt>
 <dd><p>Default constructor for the <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a>. </p>
@@ -1750,14 +1789,15 @@ TODO:<ul class="simple">
 </dd></dl>
 
 <dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread7userMapEPv8uint32_t">
-<span id="_CPPv3N6coyote7cThread7userMapEPv8uint32_t"></span><span id="_CPPv2N6coyote7cThread7userMapEPv8uint32_t"></span><span id="coyote::cThread::userMap__voidP.uint32_t"></span><span class="target" id="classcoyote_1_1cThread_1a9547c29a59caeb9f27ddaa94f1f456a7"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">userMap</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">vaddr</span></span>, <span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">len</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread7userMapEPv8uint32_t" title="Link to this definition"></a><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t">
+<span id="_CPPv3N6coyote7cThread7userMapEPv8uint32_t7int32_t"></span><span id="_CPPv2N6coyote7cThread7userMapEPv8uint32_t7int32_t"></span><span id="coyote::cThread::userMap__voidP.uint32_t.int32_t"></span><span class="target" id="classcoyote_1_1cThread_1ae98d1c2c6e971dc930cff2e127093354"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">userMap</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">vaddr</span></span>, <span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">len</span></span>, <span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">mem_block</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="o"><span class="pre">-</span></span><span class="m"><span class="pre">1</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t" title="Link to this definition"></a><br /></dt>
 <dd><p>Maps a buffer to the vFPGAs TLB. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>vaddr</strong> – Virtual address of the buffer </p></li>
 <li><p><strong>len</strong> – Length of the buffer, in bytes </p></li>
+<li><p><strong>mem_block</strong> – What memory block to store this memory in; only applicable to Versal devices When -1, the driver picks the first PC with sufficient space </p></li>
 </ul>
 </dd>
 </dl>
@@ -2019,6 +2059,12 @@ TODO:<ul class="simple">
 </dd></dl>
 
 <dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK6coyote7cThread8getQpairEv">
+<span id="_CPPv3NK6coyote7cThread8getQpairEv"></span><span id="_CPPv2NK6coyote7cThread8getQpairEv"></span><span id="coyote::cThread::getQpairC"></span><span class="target" id="classcoyote_1_1cThread_1a320ab03039fd8bf9e6b2c48fb3194859"></span><span class="n"><span class="pre">ibvQp</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">getQpair</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6coyote7cThread8getQpairEv" title="Link to this definition"></a><br /></dt>
+<dd><p>Getter: queue pair (QP) </p>
+</dd></dl>
+
+<dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK6coyote7cThread10printDebugEv">
 <span id="_CPPv3NK6coyote7cThread10printDebugEv"></span><span id="_CPPv2NK6coyote7cThread10printDebugEv"></span><span id="coyote::cThread::printDebugC"></span><span class="target" id="classcoyote_1_1cThread_1ab0787225ac56cb498868f77be6836ecc"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">printDebug</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6coyote7cThread10printDebugEv" title="Link to this definition"></a><br /></dt>
 <dd><p>Utility function, prints stats about this <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a> including the number of commands invalidations etc. </p>
@@ -2082,28 +2128,6 @@ TODO:<ul class="simple">
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Acknowledgment value received from the remote node  </p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread11doArpLookupE8uint32_t">
-<span id="_CPPv3N6coyote7cThread11doArpLookupE8uint32_t"></span><span id="_CPPv2N6coyote7cThread11doArpLookupE8uint32_t"></span><span id="coyote::cThread::doArpLookup__uint32_t"></span><span class="target" id="classcoyote_1_1cThread_1a5eaf1b0217265dc8441af9566b64dfbf"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">doArpLookup</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">ip_addr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread11doArpLookupE8uint32_t" title="Link to this definition"></a><br /></dt>
-<dd><p>Writes an IP address to a config register so it can be used for ARP lookup. </p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ip_addr</strong> – IP address to be looked up </p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread14writeQpContextE8uint32_t">
-<span id="_CPPv3N6coyote7cThread14writeQpContextE8uint32_t"></span><span id="_CPPv2N6coyote7cThread14writeQpContextE8uint32_t"></span><span id="coyote::cThread::writeQpContext__uint32_t"></span><span class="target" id="classcoyote_1_1cThread_1a96243043753d3de764f8a4a527b07726"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">writeQpContext</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">port</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread14writeQpContextE8uint32_t" title="Link to this definition"></a><br /></dt>
-<dd><p>Writes the exchanged QP information to the vFPGA config registers. </p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ip_addr</strong> – IP address to be looked up </p>
 </dd>
 </dl>
 </dd></dl>
@@ -2225,6 +2249,14 @@ TODO:<ul class="simple">
 <span id="_CPPv3N6coyote7cThread13lock_acquiredE"></span><span id="_CPPv2N6coyote7cThread13lock_acquiredE"></span><span id="coyote::cThread::lock_acquired__b"></span><span class="target" id="classcoyote_1_1cThread_1a4629374ac61319cbca1068328c15bdc9"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lock_acquired</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="k"><span class="pre">false</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread13lock_acquiredE" title="Link to this definition"></a><br /></dt>
 <dd><p>Set to true if the vFPGA lock is acquired by this <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a>; used to release the lock in the destructor. </p>
 </dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread16additional_stateE">
+<span id="_CPPv3N6coyote7cThread16additional_stateE"></span><span id="_CPPv2N6coyote7cThread16additional_stateE"></span><span id="coyote::cThread::additional_state__std::unique_ptr:AdditionalState:"></span><span class="target" id="classcoyote_1_1cThread_1a07449a8aa7b0c1abdb96d89e153ec776"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">AdditionalState</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">additional_state</span></span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread16additional_stateE" title="Link to this definition"></a><br /></dt>
+<dd></dd></dl>
 
 </div>
 </dd></dl>
@@ -2536,7 +2568,7 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;vector&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">cThread.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">coyote/cThread.hpp</span></a>&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2549,7 +2581,7 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;algorithm&gt;</em></div>
 <div class="docutils container">
-<em>#include “cDefs.hpp”</em></div>
+<em>#include &lt;coyote/cDefs.hpp&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2570,9 +2602,9 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;sys/socket.h&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cTask_8hpp"><span class="std std-ref">cTask.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cTask_8hpp"><span class="std std-ref">coyote/cTask.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “cDefs.hpp”</em></div>
+<em>#include &lt;coyote/cDefs.hpp&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2589,9 +2621,9 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;filesystem&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#bFunc_8hpp"><span class="std std-ref">bFunc.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#bFunc_8hpp"><span class="std std-ref">coyote/bFunc.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">cThread.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">coyote/cThread.hpp</span></a>&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2603,7 +2635,7 @@ TODO:<ul class="simple">
 <dt class="sig sig-object cpp">
 <span class="target" id="cOps_8hpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">cOps.hpp</span></span></dt>
 <dd><div class="docutils container">
-<em>#include “cDefs.hpp”</em></div>
+<em>#include &lt;coyote/cDefs.hpp&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2624,9 +2656,9 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;boost/interprocess/sync/named_mutex.hpp&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cOps_8hpp"><span class="std std-ref">cOps.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cOps_8hpp"><span class="std std-ref">coyote/cOps.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “cDefs.hpp”</em></div>
+<em>#include &lt;coyote/cDefs.hpp&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2645,11 +2677,11 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;syslog.h&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#bFunc_8hpp"><span class="std std-ref">bFunc.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#bFunc_8hpp"><span class="std std-ref">coyote/bFunc.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cTask_8hpp"><span class="std std-ref">cTask.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cTask_8hpp"><span class="std std-ref">coyote/cTask.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cRcnfg_8hpp"><span class="std std-ref">cRcnfg.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cRcnfg_8hpp"><span class="std std-ref">coyote/cRcnfg.hpp</span></a>&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2674,11 +2706,11 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;sys/stat.h&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cFunc_8hpp"><span class="std std-ref">cFunc.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cFunc_8hpp"><span class="std std-ref">coyote/cFunc.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cSched_8hpp"><span class="std std-ref">cSched.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cSched_8hpp"><span class="std std-ref">coyote/cSched.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">cThread.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">coyote/cThread.hpp</span></a>&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2691,7 +2723,7 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;cstdint&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">cThread.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cThread_8hpp"><span class="std std-ref">coyote/cThread.hpp</span></a>&gt;</em></div>
 </dd></dl>
 
 <dl>
@@ -2734,11 +2766,11 @@ TODO:<ul class="simple">
 <div class="docutils container">
 <em>#include &lt;boost/interprocess/sync/named_mutex.hpp&gt;</em></div>
 <div class="docutils container">
-<em>#include “cDefs.hpp”</em></div>
+<em>#include &lt;coyote/cDefs.hpp&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cOps_8hpp"><span class="std std-ref">cOps.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cOps_8hpp"><span class="std std-ref">coyote/cOps.hpp</span></a>&gt;</em></div>
 <div class="docutils container">
-<em>#include “<a class="reference internal" href="#cGpu_8hpp"><span class="std std-ref">cGpu.hpp</span></a>”</em></div>
+<em>#include &lt;<a class="reference internal" href="#cGpu_8hpp"><span class="std std-ref">coyote/cGpu.hpp</span></a>&gt;</em></div>
 </dd></dl>
 
 </section>

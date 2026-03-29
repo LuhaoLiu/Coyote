@@ -62,6 +62,8 @@ if {$cfg(en_pr) eq 0} {
             exec rm "$bit_dir/cyt_top.pdi"
             exec python fix_bif.py "$bit_dir/cyt_top.bif"
             exec bootgen -arch versal -image "$bit_dir/cyt_top.bif" -w -o "$bit_dir/cyt_top.pdi"
+
+            write_hw_platform -fixed -include_bit -force -file "$bit_dir/cyt_top.xsa"
         } else {
             puts "ERROR: Unsupported FPGA architecture: $cfg(fpga_arch)"
             exit 1

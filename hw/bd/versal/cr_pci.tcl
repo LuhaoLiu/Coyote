@@ -299,6 +299,8 @@ proc cr_bd_design_static { parentCell } {
           PMC_USE_PMC_NOC_AXI0 {1} \
           PS_IRQ_USAGE {{CH0 1} {CH1 1} {CH10 1} {CH11 1} {CH12 1} {CH13 1} {CH14 1} {CH15 1} {CH2 1} {CH3 1} {CH4 1} {CH5 1} {CH6 1} {CH7 1} {CH8 1} {CH9 1}} \
           PS_PL_CONNECTIVITY_MODE {Custom} \
+          PS_UART0_PERIPHERAL {{ENABLE 1} {IO {PS_MIO 0 .. 1}}} \
+          PS_UART1_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 4 .. 5}}} \
           PS_USE_M_AXI_FPD {1} \
           PS_M_AXI_FPD_DATA_WIDTH {128} \
           PS_USE_STARTUP {1} \
@@ -382,6 +384,8 @@ proc cr_bd_design_static { parentCell } {
           PMC_USE_PMC_NOC_AXI0 {1} \
           PS_IRQ_USAGE {{CH0 1} {CH1 1} {CH10 1} {CH11 1} {CH12 1} {CH13 1} {CH14 1} {CH15 1} {CH2 1} {CH3 1} {CH4 1} {CH5 1} {CH6 1} {CH7 1} {CH8 1} {CH9 1}} \
           PS_PL_CONNECTIVITY_MODE {Custom} \
+          PS_UART0_PERIPHERAL {{ENABLE 1} {IO {PS_MIO 0 .. 1}}} \
+          PS_UART1_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 4 .. 5}}} \
           PS_USE_M_AXI_FPD {1} \
           PS_M_AXI_FPD_DATA_WIDTH {128} \
           PS_USE_STARTUP {1} \

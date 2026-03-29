@@ -333,7 +333,7 @@ module static_top (
         .axi_fpd2pl_arlen(axi_fpd2pl_int.arlen), 
         .axi_fpd2pl_arlock(axi_fpd2pl_int.arlock),
         .axi_fpd2pl_arprot(axi_fpd2pl_int.arprot),
-        .axi_fpd2pl_arqos(axi_fpd2pl_int.arqos)
+        .axi_fpd2pl_arqos(axi_fpd2pl_int.arqos),
         .axi_fpd2pl_arready(axi_fpd2pl_int.arready),
         .axi_fpd2pl_arsize(axi_fpd2pl_int.arsize),
         .axi_fpd2pl_arvalid(axi_fpd2pl_int.arvalid),

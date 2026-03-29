@@ -319,7 +319,7 @@ proc cr_bd_design_ctrl { parentCell } {
     for {set i 0} {$i < $cnfg(n_axi_fpd2pl_valid_regions)} {incr i} {
       set port_name "axi_fpd2pls_$i"
       set mi_name [format "M%02d_AXI" $i]
-      connect_bd_intf_net -intf_net [get_bd_intf_ports $port_name] [get_bd_intf_pins smc_fpd2pl/$mi_name]
+      connect_bd_intf_net -intf_net axi_interconnect_1_$mi_name [get_bd_intf_ports $port_name] [get_bd_intf_pins axi_interconnect_1/$mi_name]
     }
   }
 

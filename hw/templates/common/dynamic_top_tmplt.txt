@@ -1198,7 +1198,9 @@ module design_dynamic_top #(
 
     {% for i in range(16) %}
     {% set vfpga_id = cnfg['pl2ps_irq_' ~ i ~ '_vfpga'] %}
-    {% if vfpga_id != -1 %}
+    // In the jinja2 script, only non-negative decimal numbers are accepts, other values are stored as string
+    // Consider updating write_hdl.py.in in the future
+    {% if vfpga_id != "-1" %}
         logic_decoupler #(.DATA_BITS(1)) inst_pl2ps_irq_decoupler_{{ i }} (.decouple(decouple_uclk[{{ vfpga_id }}]), .s_data(pl2ps_irq_ul[{{ i }}]), .m_data(pl2ps_irq_user_s1[{{ i }}]));
     {% else %}
         // Unused IRQ {{ i }}

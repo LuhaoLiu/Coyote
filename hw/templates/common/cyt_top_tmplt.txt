@@ -304,7 +304,7 @@ module cyt_top (
     wire [15:0] pl2ps_irq;
 
     // AXI Interfaces: FPD-to-PL
-    AXI4 #(.AXI4_ADDR_BITS(32), .AXI4_DATA_BITS(128)) axi_fpd2pl;
+    AXI4 #(.AXI4_ADDR_BITS(32), .AXI4_DATA_BITS(128)) axi_fpd2pl ();
 {% endif %}
 
     AXI4S axis_dyn_st2sh [N_SCHAN] ();

@@ -428,7 +428,7 @@ package lynxTypes;
 
     // PS (ARM cores)
     {% if cnfg.en_axi_fpd2pl %}
-    localparam integer N_AXI_FPD2PL_VALID_REGIONS = {{ cnfg.n_axi_fpd2pl_valid_regions }}
+    localparam integer N_AXI_FPD2PL_VALID_REGIONS = {{ cnfg.n_axi_fpd2pl_valid_regions }};
     {% endif %}
 
     // ========================---------------------------------------------

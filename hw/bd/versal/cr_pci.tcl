@@ -714,7 +714,7 @@ proc cr_bd_design_static { parentCell } {
   # M_AXI_FPD for PS-to-PL accesses
   set formatted_axi_fpd2pl_base  [format "0x%llX" [expr {$cnfg(axi_fpd2pl_base)}]]
   set formatted_axi_fpd2pl_max_offset [format "0x%llX" [expr {$cnfg(axi_fpd2pl_max_offset)}]]
-  assign_bd_address -offset $cnfg(formatted_axi_fpd2pl_base) -range $cnfg(formatted_axi_fpd2pl_max_offset) -target_address_space [get_bd_addr_spaces versal_cips_0/M_AXI_FPD] [get_bd_addr_segs axi_fpd2pl/Reg] -force
+  assign_bd_address -offset $formatted_axi_fpd2pl_base -range $formatted_axi_fpd2pl_max_offset -target_address_space [get_bd_addr_spaces versal_cips_0/M_AXI_FPD] [get_bd_addr_segs axi_fpd2pl/Reg] -force
 
   # Restore current instance
   current_bd_instance $oldCurInst

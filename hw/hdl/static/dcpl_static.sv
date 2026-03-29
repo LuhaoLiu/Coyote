@@ -43,6 +43,14 @@ module dcpl_static #(
     AXI4.s                                  s_axi_main,
     AXI4.m                                  m_axi_main,
 
+`ifdef VERSAL_ARCH
+    input  logic [15:0]                     s_pl2ps_irq,
+    output logic [15:0]                     m_pl2ps_irq,
+
+    AXI4.s                                  s_axi_fpd2pl,
+    AXI4.m                                  m_axi_fpd2pl,
+`endif
+
     AXI4S.s                                 s_axis_dyn_out [N_SCHAN],
     AXI4S.m                                 m_axis_dyn_out [N_SCHAN],
     AXI4S.s                                 s_axis_dyn_in [N_SCHAN],
@@ -62,6 +70,12 @@ module dcpl_static #(
     logic [N_REG_STA_DCPL-1:0] decouple;
     logic [14:0] usr_irq;
     AXI4 axi_main  ();
+
+`ifdef VERSAL_ARCH
+    logic [15:0] pl2ps_irq;
+    AXI4 #(.AXI4_ADDR_BITS(32), .AXI4_DATA_BITS(128)) axi_fpd2pl ();
+`endif
+
     AXI4S axis_dyn_out [N_SCHAN] (.*);
     AXI4S axis_dyn_in [N_SCHAN] (.*);
     dmaIntf dma_rd_req [N_SCHAN] ();
@@ -89,6 +103,12 @@ module dcpl_static #(
     // Slicing    
     logic_reg_array_static #(.N_STAGES(N_STAGES_0), .DATA_BITS(15)) inst_s0_usr_irq (.aclk(aclk), .aresetn(aresetn), .s_data(usr_irq), .m_data(m_usr_irq));
     axi_reg_array_static #(.N_STAGES(N_STAGES_0)) inst_s0_axi_main (.aclk(aclk), .aresetn(aresetn), .s_axi(s_axi_main), .m_axi(axi_main));
+
+`ifdef VERSAL_ARCH
+    logic_reg_array_static #(.N_STAGES(N_STAGES_0), .DATA_BITS(16)) inst_s0_pl2ps_irq (.aclk(aclk), .aresetn(aresetn), .s_data(pl2ps_irq), .m_data(m_pl2ps_irq));
+    axi_reg_array_static #(.N_STAGES(N_STAGES_0), .DATA_BITS(128), .ADDR_BITS(32)) inst_s0_axi_fpd2pl (.aclk(aclk), .aresetn(aresetn), .s_axi(s_axi_fpd2pl), .m_axi(axi_fpd2pl));
+`endif
+
     for(genvar i = 0; i < N_SCHAN; i++) begin
         axis_reg_array_static #(.N_STAGES(N_STAGES_0)) inst_s0_axis_dyn_out (.aclk(aclk), .aresetn(aresetn), .s_axis(s_axis_dyn_out[i]), .m_axis(axis_dyn_out[i]));
         axis_reg_array_static #(.N_STAGES(N_STAGES_0)) inst_s0_axis_dyn_in (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_dyn_in[i]), .m_axis(m_axis_dyn_in[i]));
@@ -104,6 +124,11 @@ module dcpl_static #(
     // Decoupling
     logic_decoupler_static #(.DATA_BITS(15)) inst_s1_usr_irq (.decouple(decouple[N_REG_STA_DCPL-1]), .s_data(s_usr_irq), .m_data(usr_irq));
     axi_decoupler_static inst_s1_axi_main (.decouple(decouple[N_REG_STA_DCPL-1]), .s_axi(axi_main), .m_axi(m_axi_main));
+
+`ifdef VERSAL_ARCH
+    logic_decoupler_static #(.DATA_BITS(16)) inst_s1_pl2ps_irq (.decouple(decouple[N_REG_STA_DCPL-1]), .s_data(s_pl2ps_irq), .m_data(pl2ps_irq));
+    axi_decoupler_static #(.ADDR_BITS(32), .DATA_BITS(128)) inst_s1_axi_fpd2pl (.decouple(decouple[N_REG_STA_DCPL-1]), .s_axi(axi_fpd2pl), .m_axi(m_axi_fpd2pl));
+`endif
 
     for(genvar i = 0; i < N_SCHAN; i++) begin
         axis_decoupler_static inst_s1_axis_dyn_out (.decouple(decouple[N_REG_STA_DCPL-1]), .s_axis(axis_dyn_out[i]), .m_axis(m_axis_dyn_out[i]));

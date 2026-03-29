@@ -158,6 +158,28 @@ set(EN_NET_1 0 CACHE STRING "QSFP port 1")
 set(EN_HOST_NETWORKING 0 CACHE STRING "Enable host networking")
 
 ##
+## ARM CORES PS SUBSYSTEM (Versal only)
+## PS-PL interface for on-board ARM cores
+##
+
+# Enable PL-to-PS interrupts from the FPGA to the on-board ARM cores
+set(EN_PL2PS_IRQ 0 CACHE STRING "Enable PS-PL interface for on-board ARM cores")
+# IRQs assignment for PS-PL interrupts; only applicable if EN_PS=1
+set(N_PL2PS_IRQ 16 CACHE STRING "Number of PL2PS IRQs; this is a constant number and expected not to be changed")
+math(EXPR MAX_PL2PS_IRQ "${N_PL2PS_IRQ} - 1")
+foreach(i RANGE ${MAX_PL2PS_IRQ})
+    set(PL2PS_IRQ_${i}_VFPGA -1 CACHE STRING "ID of vFPGA sending PL2PS IRQ ${i}; set to -1 to disable")
+endforeach()
+
+# Address mapping for M_AXI_FPD (axi_fpd2pl) interface; only applicable if EN_PS=1
+set(EN_AXI_FPD2PL 0 CACHE STRING "Enable AXI FPD to PL interface")
+math(EXPR MAX_REGIONS "${N_REGIONS} - 1")
+foreach(i RANGE ${MAX_REGIONS})
+    set(AXI_FPD2PL_VFPGA_${i}_OFFSET -1 CACHE STRING "Address offset for vFPGA ${i} on the AXI FPD to PL interface; set to -1 to disable")
+    set(AXI_FPD2PL_VFPGA_${i}_SIZE 0 CACHE STRING "Size of the AXI FPD to PL interface for vFPGA ${i} in bytes")
+endforeach()
+
+##
 ## RECONFIGURATION
 ##
 # Enable application (vFPGA) reconfiguration
@@ -468,6 +490,95 @@ macro(validation_checks_hw)
         else()
             set(AV_HBM 0)
         endif()
+
+        ##
+        ## CIPS ARM cores support
+        ##
+        set(CIPS_DEV "v80")
+
+        if(EN_PL2PS_IRQ OR EN_AXI_FPD2PL)
+            message("** PS-PL interface for on-board ARM cores enabled")
+            set(EN_PS_PL_IF 1)
+        endif()
+
+        list(FIND CIPS_DEV ${FDEV_NAME} TMP_DEV)
+        if(EN_PS_PL_IF AND TMP_DEV EQUAL -1)
+            message(FATAL_ERROR "EN_PS_PL_IF is enabled, but the target device does not support CIPS ARM cores.")
+        endif()
+
+        # Validation of address mapping for AXI FPD to PL interface
+        set(N_AXI_FPD2PL_VALID_REGIONS 0)
+        if(EN_AXI_FPD2PL)
+            set(AXI_FPD2PL_BASE 0xA8000000) # Base address
+            set(AXI_FPD2PL_MAX_OFFSET 0x8000000) # Size: 128MB
+            math(EXPR MAX_REGIONS "${N_REGIONS} - 1")
+            foreach(i RANGE ${MAX_REGIONS})
+                # Set default if undefined
+                if(NOT DEFINED AXI_FPD2PL_VFPGA_${i}_OFFSET)
+                    set(AXI_FPD2PL_VFPGA_${i}_OFFSET -1)
+                endif()
+
+                set(OFF_I ${AXI_FPD2PL_VFPGA_${i}_OFFSET})
+                # Only run checks if enabled
+                if(OFF_I GREATER -1)
+                    math(EXPR N_AXI_FPD2PL_VALID_REGIONS "${N_AXI_FPD2PL_VALID_REGIONS} + 1")
+                    
+                    set(SZ_I ${AXI_FPD2PL_VFPGA_${i}_SIZE})
+            
+                    # Check Bounds and Alignment
+                    math(EXPR END_I "${OFF_I} + ${SZ_I}")
+                    math(EXPR ALIGN_ERR "(${AXI_FPD2PL_BASE} + ${OFF_I}) % ${SZ_I}")
+                    if(END_I GREATER AXI_FPD2PL_MAX_OFFSET OR ALIGN_ERR)
+                        message(FATAL_ERROR "AXI_FPD2PL for Region ${i} exceeds valid range or is unaligned!")
+                    endif()
+                endif()
+            endforeach()
+        endif()
+
+        if(EN_AXI_FPD2PL AND N_AXI_FPD2PL_VALID_REGIONS EQUAL 0)
+            message(FATAL_ERROR "EN_AXI_FPD2PL is enabled, but no valid regions (offsets != -1) were found!")
+        endif()
+
+        # Dynamic Tcl/CMake generation for CIPS configuration
+        set(CIPS_BASE_TCL_DYNAMIC_CONFIG "")
+        set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "")
+        set(N_AXI_FPD2PL_VALID_REGIONS 0)
+        if(EN_AXI_FPD2PL)
+            set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(axi_fpd2pl_base)            ${AXI_FPD2PL_BASE}\n")
+            set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(axi_fpd2pl_max_offset)      ${AXI_FPD2PL_MAX_OFFSET}\n")
+
+            set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(AXI_FPD2PL_BASE            ${AXI_FPD2PL_BASE})\n")
+            set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(AXI_FPD2PL_MAX_OFFSET      ${AXI_FPD2PL_MAX_OFFSET})\n")
+
+            math(EXPR MAX_REGIONS "${N_REGIONS} - 1")
+            foreach(i RANGE ${MAX_REGIONS})
+                set(OFF_I ${AXI_FPD2PL_VFPGA_${i}_OFFSET})
+                if(OFF_I GREATER -1)
+                    set(SZ_I ${AXI_FPD2PL_VFPGA_${i}_SIZE})
+        
+                    set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(axi_fpd2pl_${N_AXI_FPD2PL_VALID_REGIONS}_vfpga_id)      ${i}\n")
+                    set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(axi_fpd2pl_${N_AXI_FPD2PL_VALID_REGIONS}_offset)        ${OFF_I}\n")
+                    set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(axi_fpd2pl_${N_AXI_FPD2PL_VALID_REGIONS}_size)          ${SZ_I}\n")
+        
+                    set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(AXI_FPD2PL_${N_AXI_FPD2PL_VALID_REGIONS}_VFPGA_ID      ${i})\n")
+                    set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(AXI_FPD2PL_${N_AXI_FPD2PL_VALID_REGIONS}_OFFSET        ${OFF_I})\n")
+                    set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(AXI_FPD2PL_${N_AXI_FPD2PL_VALID_REGIONS}_SIZE          ${SZ_I})\n")
+        
+                    math(EXPR N_AXI_FPD2PL_VALID_REGIONS "${N_AXI_FPD2PL_VALID_REGIONS} + 1")
+                endif()
+            endforeach()
+            set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(n_axi_fpd2pl_valid_regions) ${N_AXI_FPD2PL_VALID_REGIONS}\n")
+            set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(N_AXI_FPD2PL_VALID_REGIONS ${N_AXI_FPD2PL_VALID_REGIONS})\n")
+        endif()
+
+        if(EN_PL2PS_IRQ)
+            math(EXPR MAX_PL2PS_IRQ "${N_PL2PS_IRQ} - 1")
+            foreach(i RANGE ${MAX_PL2PS_IRQ})
+                set(CIPS_BASE_TCL_DYNAMIC_CONFIG "${CIPS_BASE_TCL_DYNAMIC_CONFIG}set cfg(pl2ps_irq_${i}_vfpga) ${PL2PS_IRQ_${i}_VFPGA}\n")
+                set(CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG "${CIPS_EXPORT_CMAKE_DYNAMIC_CONFIG}set(PL2PS_IRQ_${i}_VFPGA ${PL2PS_IRQ_${i}_VFPGA})\n")
+            endforeach()
+        endif()
+
 
         ##
         ## User logic

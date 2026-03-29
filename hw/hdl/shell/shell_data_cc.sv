@@ -38,6 +38,13 @@ module shell_data_cc #(
     input  logic [14:0]     s_usr_irq,
     output logic [14:0]     m_usr_irq,
 
+`ifdef VERSAL_ARCH
+`ifdef EN_PL2PS_IRQ
+    input  logic [15:0]     s_pl2ps_irq,
+    output logic [15:0]     m_pl2ps_irq,
+`endif
+`endif
+
     AXI4S.s                 s_axis_dyn_in [N_SCHAN],
     AXI4S.m                 m_axis_dyn_in [N_SCHAN],
     AXI4S.s                 s_axis_dyn_out [N_SCHAN],
@@ -59,6 +66,13 @@ module shell_data_cc #(
 );
 
 logic [2-1:0][14:0] usr_irq;
+
+`ifdef VERSAL_ARCH
+`ifdef EN_PL2PS_IRQ
+logic [2-1:0][15:0] pl2ps_irq;
+`endif
+`endif
+
 AXI4S axis_dyn_in [N_SCHAN][2] ();
 AXI4S axis_dyn_out [N_SCHAN][2] ();
 dmaIntf dma_rd_req [N_SCHAN][2] ();
@@ -69,6 +83,12 @@ metaIntf #(.STYPE(wback_t)) wback [2] ();
 
 // Slicing input
 logic_reg_array #(.N_STAGES(N_STAGES_0), .DATA_BITS(15)) inst_s0_usr_irq (.aclk(xclk), .aresetn(xresetn), .s_data(usr_irq[0]), .m_data(m_usr_irq));
+
+`ifdef VERSAL_ARCH
+`ifdef EN_PL2PS_IRQ
+logic_reg_array #(.N_STAGES(N_STAGES_0), .DATA_BITS(16)) inst_s0_pl2ps_irq (.aclk(xclk), .aresetn(xresetn), .s_data(pl2ps_irq[0]), .m_data(m_pl2ps_irq));
+`endif
+`endif
 
 for(genvar i = 0; i < N_SCHAN; i++) begin
     axis_reg_array #(.N_STAGES(N_STAGES_0)) inst_s0_axis_dyn_out (.aclk(xclk), .aresetn(xresetn), .s_axis(s_axis_dyn_in[i]), .m_axis(axis_dyn_in[i][0]));
@@ -84,6 +104,12 @@ end
 // Ccross
 logic_ccross #(.DATA_BITS(15)) inst_s2_usr_irq (.s_aclk(aclk), .s_aresetn(aresetn), .m_aclk(xclk), .m_aresetn(xresetn), .s_data(usr_irq[1]), .m_data(usr_irq[0]));
 
+`ifdef VERSAL_ARCH
+`ifdef EN_PL2PS_IRQ
+logic_ccross #(.DATA_BITS(16)) inst_s2_pl2ps_irq (.s_aclk(aclk), .s_aresetn(aresetn), .m_aclk(xclk), .m_aresetn(xresetn), .s_data(pl2ps_irq[1]), .m_data(pl2ps_irq[0]));
+`endif
+`endif
+
 for(genvar i = 0; i < N_SCHAN; i++) begin
     axis_ccross inst_s2_axis_dyn_out (.s_aclk(xclk), .s_aresetn(xresetn), .m_aclk(aclk), .m_aresetn(aresetn), .s_axis(axis_dyn_in[i][0]), .m_axis(axis_dyn_in[i][1]));
     axis_ccross inst_s2_axis_dyn_in (.s_aclk(aclk), .s_aresetn(aresetn), .m_aclk(xclk), .m_aresetn(xresetn), .s_axis(axis_dyn_out[i][1]), .m_axis(axis_dyn_out[i][0]));
@@ -97,6 +123,12 @@ end
 
 // Slicing output
 logic_reg_array #(.N_STAGES(N_STAGES_1), .DATA_BITS(15)) inst_s3_usr_irq (.aclk(aclk), .aresetn(aresetn), .s_data(s_usr_irq), .m_data(usr_irq[1]));
+
+`ifdef VERSAL_ARCH
+`ifdef EN_PL2PS_IRQ
+logic_reg_array #(.N_STAGES(N_STAGES_1), .DATA_BITS(16)) inst_s3_pl2ps_irq (.aclk(aclk), .aresetn(aresetn), .s_data(s_pl2ps_irq), .m_data(pl2ps_irq[1]));
+`endif
+`endif
 
 for(genvar i = 0; i < N_SCHAN; i++) begin
     axis_reg_array #(.N_STAGES(N_STAGES_1)) inst_s3_axis_dyn_out (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_dyn_in[i][1]), .m_axis(m_axis_dyn_in[i]));

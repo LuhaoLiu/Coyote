@@ -42,6 +42,12 @@ module static_top (
     // AXI control interface
     AXI4.m                                  m_axi_main,
 
+    // PL-to-PS Interrupts
+    input  logic [15:0]                     s_pl2ps_irq,
+
+    // AXI FPD-to-PL interface
+    AXI4.m                                  m_axi_fpd2pl,
+
     // AXI debug hub control
     AXI4.m                                  m_axi_debug_hub,
 
@@ -72,6 +78,9 @@ module static_top (
     // Interrupts
     logic [15:0] usr_irq;
 
+    // PL-to-PS Interrupts
+    logic [15:0] pl2ps_irq;
+
     // AXI static config & control
     AXI4L #(.AXI4L_DATA_BITS(32), .AXI4L_ADDR_BITS(32)) axi_cnfg_int ();
 
@@ -79,6 +88,9 @@ module static_top (
     AXI4 axi_main_int ();
     logic [AXI_ADDR_BITS-1:0] lsb_araddr;
     logic [AXI_ADDR_BITS-1:0] lsb_awaddr;
+
+    // AXI FPD-to-PL
+    AXI4 #(.AXI4_ADDR_BITS(32), .AXI4_DATA_BITS(128)) axi_fpd2pl_int ();
 
     // AXI data streams
     AXI4S axis_dyn_out_int [N_HCHAN] ();
@@ -313,12 +325,69 @@ module static_top (
         .axi_debug_hub_wstrb(m_axi_debug_hub.wstrb),
         .axi_debug_hub_wvalid(m_axi_debug_hub.wvalid),
 
+        // FPD-to-PL
+        .axi_fpd2pl_araddr(axi_fpd2pl_int.araddr), 
+        .axi_fpd2pl_arburst(axi_fpd2pl_int.arburst),
+        .axi_fpd2pl_arcache(axi_fpd2pl_int.arcache),
+        //.axi_fpd2pl_arid(axi_fpd2pl_int.arid),
+        .axi_fpd2pl_arlen(axi_fpd2pl_int.arlen), 
+        .axi_fpd2pl_arlock(axi_fpd2pl_int.arlock),
+        .axi_fpd2pl_arprot(axi_fpd2pl_int.arprot),
+        .axi_fpd2pl_arqos(axi_fpd2pl_int.arqos)
+        .axi_fpd2pl_arready(axi_fpd2pl_int.arready),
+        .axi_fpd2pl_arsize(axi_fpd2pl_int.arsize),
+        .axi_fpd2pl_arvalid(axi_fpd2pl_int.arvalid),
+        .axi_fpd2pl_awaddr(axi_fpd2pl_int.awaddr),
+        .axi_fpd2pl_awburst(axi_fpd2pl_int.awburst),
+        .axi_fpd2pl_awcache(axi_fpd2pl_int.awcache),
+        //.axi_fpd2pl_awid(axi_fpd2pl_int.awid),
+        .axi_fpd2pl_awlen(axi_fpd2pl_int.awlen),
+        .axi_fpd2pl_awlock(axi_fpd2pl_int.awlock),
+        .axi_fpd2pl_awprot(axi_fpd2pl_int.awprot),
+        .axi_fpd2pl_awqos(axi_fpd2pl_int.awqos),
+        .axi_fpd2pl_awready(axi_fpd2pl_int.awready),
+        .axi_fpd2pl_awsize(axi_fpd2pl_int.awsize),
+        .axi_fpd2pl_awvalid(axi_fpd2pl_int.awvalid),
+        .axi_fpd2pl_bready(axi_fpd2pl_int.bready),
+        .axi_fpd2pl_bresp(axi_fpd2pl_int.bresp),
+        //.axi_fpd2pl_bid(axi_fpd2pl_int.bid),
+        .axi_fpd2pl_bvalid(axi_fpd2pl_int.bvalid),
+        .axi_fpd2pl_rdata(axi_fpd2pl_int.rdata),
+        //.axi_fpd2pl_rid(axi_fpd2pl_int.rid),
+        .axi_fpd2pl_rlast(axi_fpd2pl_int.rlast),
+        .axi_fpd2pl_rready(axi_fpd2pl_int.rready),
+        .axi_fpd2pl_rresp(axi_fpd2pl_int.rresp),
+        .axi_fpd2pl_rvalid(axi_fpd2pl_int.rvalid),
+        .axi_fpd2pl_wdata(axi_fpd2pl_int.wdata),
+        .axi_fpd2pl_wlast(axi_fpd2pl_int.wlast),
+        .axi_fpd2pl_wready(axi_fpd2pl_int.wready),
+        .axi_fpd2pl_wstrb(axi_fpd2pl_int.wstrb),
+        .axi_fpd2pl_wvalid(axi_fpd2pl_int.wvalid),
+
         // Interrupts
         .usr_irq_valid(usr_irq_valid),
         .usr_irq_vec(usr_irq_vec),
         .usr_irq_fnc(usr_irq_fnc),
         .usr_irq_ack(usr_irq_ack),
         .usr_irq_fail(usr_irq_fail),
+
+        // PL-to-PS Interrupts
+        .pl2ps_irq_0(pl2ps_irq[0]),
+        .pl2ps_irq_1(pl2ps_irq[1]),
+        .pl2ps_irq_2(pl2ps_irq[2]),
+        .pl2ps_irq_3(pl2ps_irq[3]),
+        .pl2ps_irq_4(pl2ps_irq[4]),
+        .pl2ps_irq_5(pl2ps_irq[5]),
+        .pl2ps_irq_6(pl2ps_irq[6]),
+        .pl2ps_irq_7(pl2ps_irq[7]),
+        .pl2ps_irq_8(pl2ps_irq[8]),
+        .pl2ps_irq_9(pl2ps_irq[9]),
+        .pl2ps_irq_10(pl2ps_irq[10]),
+        .pl2ps_irq_11(pl2ps_irq[11]),
+        .pl2ps_irq_12(pl2ps_irq[12]),
+        .pl2ps_irq_13(pl2ps_irq[13]),
+        .pl2ps_irq_14(pl2ps_irq[14]),
+        .pl2ps_irq_15(pl2ps_irq[15]),
 
         // H2C Data Streams
         .m_axis_h2c_tdata(h2c_data_int.payload.tdata),
@@ -496,6 +565,13 @@ module static_top (
         
         .s_axi_main(axi_main_int),
         .m_axi_main(m_axi_main),
+
+        .s_pl2ps_irq(s_pl2ps_irq),
+        .m_pl2ps_irq(pl2ps_irq),
+
+        .s_axi_fpd2pl(axi_fpd2pl_int),
+        .m_axi_fpd2pl(m_axi_fpd2pl),
+
         .s_axis_dyn_out(axis_dyn_out_int[0+:N_SCHAN]),
         .m_axis_dyn_out(m_axis_dyn_out),
         .s_axis_dyn_in(s_axis_dyn_in),

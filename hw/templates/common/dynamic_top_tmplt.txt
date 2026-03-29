@@ -119,6 +119,14 @@ module design_dynamic_top #(
     // IRQ
     output logic[N_REGIONS-1:0]                 m_usr_irq,
 
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    output logic[15:0]                          m_pl2ps_irq,
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    AXI4L.s                                     s_axi_fpd2pls [N_AXI_FPD2PL_VALID_REGIONS],
+{% endif %}
+
 {% if cnfg.fpga_arch == 'ultrascale_plus' %}
     // Debug
     input  logic [N_REGIONS-1:0]                S_BSCAN_drck,
@@ -1006,6 +1014,20 @@ module design_dynamic_top #(
         axil_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0)) (.aclk(aclk), .aresetn(aresetn), .s_axi(s_axi_ctrl[i]), .m_axi(axi_ctrl_s0[i]));
     end
 
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    AXI4L #(.AXI4L_ADDR_BITS(32), .AXI4L_DATA_BITS(64)) axi_fpd2pls_s0 [N_AXI_FPD2PL_VALID_REGIONS] ();
+
+    for(genvar i = 0; i < N_AXI_FPD2PL_VALID_REGIONS; i++) begin
+        axil_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0), .DATA_BITS(64), .ADDR_BITS(32)) (.aclk(aclk), .aresetn(aresetn), .s_axi(s_axi_fpd2pls[i]), .m_axi(axi_fpd2pls_s0[i]));
+    end
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    logic [15:0] pl2ps_irq_s0;
+
+    logic_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0), .DATA_BITS(16)) (.aclk(aclk), .aresetn(aresetn), .s_data(pl2ps_irq_s0), .m_data(m_pl2ps_irq)); 
+{% endif %}
+
 {% if cnfg.en_avx %}
     AXI4 #(.AXI4_DATA_BITS(AVX_DATA_BITS)) axim_ctrl_s0 [N_REGIONS] ();
 
@@ -1031,8 +1053,17 @@ module design_dynamic_top #(
     metaIntf #(.STYPE(ack_t)) bpss_rd_cq_s0 [N_REGIONS] ();
     metaIntf #(.STYPE(ack_t)) bpss_wr_cq_s0 [N_REGIONS] ();
 
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    AXI4L #(.AXI4L_ADDR_BITS(32), .AXI4L_DATA_BITS(64)) axi_fpd2pls_user_s0 [N_AXI_FPD2PL_VALID_REGIONS] ();
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    logic [15:0] pl2ps_irq_user_s0;
+{% endif %}
+
 
 {% if cnfg.en_uclk %}
+
     for(genvar i = 0; i < N_REGIONS; i++) begin
         axil_ccross (.s_aclk(aclk), .s_aresetn(aresetn), .m_aclk(uclk), .m_aresetn(uresetn), .s_axi(axi_ctrl_user[i]), .m_axi(axi_ctrl_user_s0[i]));
         meta_ccross #(.DATA_BITS(NOTIFY_BITS)) (.s_aclk(uclk), .s_aresetn(uresetn), .m_aclk(aclk), .m_aresetn(aresetn), .s_meta(notify_s0[i]), .m_meta(notify[i]));
@@ -1044,7 +1075,18 @@ module design_dynamic_top #(
         
     end
 
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    for(genvar i = 0; i < N_AXI_FPD2PL_VALID_REGIONS; i++) begin
+        axil_ccross_64_32 (.s_aclk(aclk), .s_aresetn(aresetn), .m_aclk(uclk), .m_aresetn(uresetn), .s_axi(axi_fpd2pls_s0[i]), .m_axi(axi_fpd2pls_user_s0[i]));
+    end
+    {% endif %}
+
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    logic_ccross #(.DATA_BITS(16)) (.s_aclk(uclk), .s_aresetn(uresetn), .m_aclk(aclk), .m_aresetn(aresetn), s_data(pl2ps_irq_user_s0), .m_data(pl2ps_irq_s0));
+    {% endif %}
+
 {% else %}
+
     for(genvar i = 0; i < N_REGIONS; i++) begin
         `AXIL_ASSIGN(axi_ctrl_user[i], axi_ctrl_user_s0[i])
         `META_ASSIGN(notify_s0[i], notify[i])
@@ -1054,6 +1096,16 @@ module design_dynamic_top #(
         `META_ASSIGN(bpss_rd_cq[i], bpss_rd_cq_s0[i])
         `META_ASSIGN(bpss_wr_cq[i], bpss_wr_cq_s0[i])
     end
+
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    for(genvar i = 0; i < N_AXI_FPD2PL_VALID_REGIONS; i++) begin
+        `AXIL_ASSIGN(axi_fpd2pls_s0[i], axi_fpd2pls_user_s0[i])
+    end
+    {% endif %}
+
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    assign pl2ps_irq_s0 = pl2ps_irq_user_s0;
+    {% endif %}
 
 {% endif %}	
 
@@ -1087,6 +1139,30 @@ module design_dynamic_top #(
 {% endif %}
     end	
 
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    AXI4L #(.AXI4L_ADDR_BITS(32), .AXI4L_DATA_BITS(64)) axi_fpd2pls_user_s1 [N_AXI_FPD2PL_VALID_REGIONS] ();
+    
+    for(genvar i = 0; i < N_AXI_FPD2PL_VALID_REGIONS; i++) begin
+    {% if cnfg.en_uclk %}
+        axil_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0), .DATA_BITS(64), .ADDR_BITS(32)) (.aclk(uclk), .aresetn(uresetn), .s_axi(axi_fpd2pls_user_s0[i]), .m_axi(axi_fpd2pls_user_s1[i]));
+    {% else %}
+        axil_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0), .DATA_BITS(64), .ADDR_BITS(32)) (.aclk(aclk), .aresetn(aresetn), .s_axi(axi_fpd2pls_user_s0[i]), .m_axi(axi_fpd2pls_user_s1[i]));
+    {% endif %}
+    end
+
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    logic [15:0] pl2ps_irq_user_s1;
+
+    {% if cnfg.en_uclk %}
+    logic_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0), .DATA_BITS(16)) (.aclk(uclk), .aresetn(uresetn), .s_data(pl2ps_irq_user_s1), .m_data(pl2ps_irq_user_s0));
+    {% else %}
+    logic_reg_array #(.N_STAGES(N_REG_DYN_HOST_S0), .DATA_BITS(16)) (.aclk(aclk), .aresetn(aresetn), .s_data(pl2ps_irq_user_s1), .m_data(pl2ps_irq_user_s0));
+    {% endif %}
+
+{% endif %}
+
 	// Decoupling 
 	// ----------------------------------------------------------------------
 	AXI4L axi_ctrl_user_ul [N_REGIONS] ();
@@ -1105,6 +1181,33 @@ module design_dynamic_top #(
     meta_decoupler (.decouple(decouple_uclk), .s_meta(bpss_wr_sq_ul), .m_meta(bpss_wr_sq_s1));
     meta_decoupler (.decouple(decouple_uclk), .s_meta(bpss_rd_cq_s1), .m_meta(bpss_rd_cq_ul));
     meta_decoupler (.decouple(decouple_uclk), .s_meta(bpss_wr_cq_s1), .m_meta(bpss_wr_cq_ul));
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+
+    AXI4L #(.AXI4L_ADDR_BITS(32), .AXI4L_DATA_BITS(64)) axi_fpd2pls_ul [N_AXI_FPD2PL_VALID_REGIONS] ();
+
+    {% for i in range(cnfg.n_axi_fpd2pl_valid_regions) %}
+    {% set vfpga_id = cnfg['axi_fpd2pl_' ~ i ~ '_vfpga_id'] %}
+        axil_decoupler_single #(.ADDR_BITS(32), .DATA_BITS(64)) inst_axil_decoupler_single_{{ i }} (.decouple(decouple_uclk[{{ vfpga_id }}]), .s_axi(axi_fpd2pls_user_s1[{{ i }}]), .m_axi(axi_fpd2pls_ul[{{ i }}]));
+    {% endfor %}
+
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    logic [15:0] pl2ps_irq_ul;
+
+    {% for i in range(16) %}
+    {% set vfpga_id = cnfg['pl2ps_irq_' ~ i ~ '_vfpga'] %}
+    {% if vfpga_id != -1 %}
+        logic_decoupler #(.DATA_BITS(1)) inst_pl2ps_irq_decoupler_{{ i }} (.decouple(decouple_uclk[{{ vfpga_id }}]), .s_data(pl2ps_irq_ul[{{ i }}]), .m_data(pl2ps_irq_user_s1[{{ i }}]));
+    {% else %}
+        // Unused IRQ {{ i }}
+        assign pl2ps_irq_ul[{{ i }}] = 1'b0; 
+        assign pl2ps_irq_user_s1[{{ i }}] = pl2ps_irq_ul[{{ i }}];
+    {% endif %}
+    {% endfor %}
+
+{% endif %}
 
     // ================-----------------------------------------------------------------
 	// MMU and CONFIG 
@@ -1354,6 +1457,45 @@ module design_dynamic_top #(
         .filter_config_data(m_filter_config.data),
         .filter_config_ready(m_filter_config.ready),
         .filter_config_valid(m_filter_config.valid),
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    // PL-to-PS interrupts
+
+    {% for k in range(16) %}
+    {% if cnfg['pl2ps_irq_' ~ k ~ '_vfpga'] == i %}
+        .pl2ps_irq_{{ k }}(pl2ps_irq_ul[{{ k }}]),
+    {% endif %}
+    {% endfor %}
+
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    // AXI FPD-to-PL interface
+
+    {% for k in range(cnfg.n_axi_fpd2pl_valid_regions) %}
+    {% if cnfg['axi_fpd2pl_' ~ k ~ '_vfpga_id'] == i %}
+        .axi_fpd2pl_araddr              (axi_fpd2pls_ul[{{ k }}].araddr),
+        .axi_fpd2pl_arprot              (axi_fpd2pls_ul[{{ k }}].arprot),
+        .axi_fpd2pl_arready             (axi_fpd2pls_ul[{{ k }}].arready),
+        .axi_fpd2pl_arvalid             (axi_fpd2pls_ul[{{ k }}].arvalid),
+        .axi_fpd2pl_awaddr              (axi_fpd2pls_ul[{{ k }}].awaddr),
+        .axi_fpd2pl_awprot              (axi_fpd2pls_ul[{{ k }}].awprot),
+        .axi_fpd2pl_awready             (axi_fpd2pls_ul[{{ k }}].awready),
+        .axi_fpd2pl_awvalid             (axi_fpd2pls_ul[{{ k }}].awvalid),
+        .axi_fpd2pl_bready              (axi_fpd2pls_ul[{{ k }}].bready),
+        .axi_fpd2pl_bresp               (axi_fpd2pls_ul[{{ k }}].bresp),
+        .axi_fpd2pl_bvalid              (axi_fpd2pls_ul[{{ k }}].bvalid),
+        .axi_fpd2pl_rdata               (axi_fpd2pls_ul[{{ k }}].rdata),
+        .axi_fpd2pl_rready              (axi_fpd2pls_ul[{{ k }}].rready),
+        .axi_fpd2pl_rresp               (axi_fpd2pls_ul[{{ k }}].rresp),
+        .axi_fpd2pl_rvalid              (axi_fpd2pls_ul[{{ k }}].rvalid),
+        .axi_fpd2pl_wdata               (axi_fpd2pls_ul[{{ k }}].wdata),
+        .axi_fpd2pl_wready              (axi_fpd2pls_ul[{{ k }}].wready),
+        .axi_fpd2pl_wstrb               (axi_fpd2pls_ul[{{ k }}].wstrb),
+        .axi_fpd2pl_wvalid              (axi_fpd2pls_ul[{{ k }}].wvalid),
+    {% endif %}
+    {% endfor %}
 {% endif %}
 
 {% if cnfg.fpga_arch == 'ultrascale_plus' %}

@@ -166,6 +166,26 @@ proc cr_bd_design_static { parentCell } {
   # User interrupts
   set usr_irq [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:qdma_usr_irq_rtl:1.0 usr_irq ]
 
+  # FPD-to-PL Master AXI interface
+  set axi_fpd2pl [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 axi_fpd2pl ]
+  set_property -dict [ list \
+    CONFIG.ADDR_WIDTH {32} \
+    CONFIG.DATA_WIDTH {128} \
+    CONFIG.HAS_BRESP {1} \
+    CONFIG.HAS_BURST {1} \
+    CONFIG.HAS_CACHE {1} \
+    CONFIG.HAS_LOCK {1} \
+    CONFIG.HAS_PROT {1} \
+    CONFIG.HAS_QOS {1} \
+    CONFIG.HAS_REGION {1} \
+    CONFIG.HAS_RRESP {1} \
+    CONFIG.HAS_WSTRB {1} \
+    CONFIG.NUM_READ_OUTSTANDING {4} \
+    CONFIG.NUM_WRITE_OUTSTANDING {4} \
+    CONFIG.PROTOCOL {AXI4} \
+    CONFIG.READ_WRITE_MODE {READ_WRITE} \
+  ] $axi_fpd2pl
+
 ########################################################################################################
 # Create ports
 ########################################################################################################
@@ -183,12 +203,18 @@ proc cr_bd_design_static { parentCell } {
   # Main clock
   set xclk [ create_bd_port -dir O -type clk xclk ]
   set_property -dict [ list \
-    CONFIG.ASSOCIATED_BUSIF {m_axis_h2c:s_axis_c2h:axi_cnfg:axi_main:axi_debug_hub} \
+    CONFIG.ASSOCIATED_BUSIF {m_axis_h2c:s_axis_c2h:axi_cnfg:axi_main:axi_debug_hub:axi_fpd2pl} \
     CONFIG.ASSOCIATED_RESET {xresetn:sresetn:eos_resetn} \
   ] $xclk
 
   # End-of-startup signal from PMC (asserted after parcial reconfiguration is done)
   set eos_pmc [ create_bd_port -dir O -type rst eos_pmc ]
+
+  # PL-to-PS interrupts
+  for {set i 0} {$i < 16} {incr i} {
+    create_bd_port -dir I -type intr "pl2ps_irq_$i"
+    set_property CONFIG.SENSITIVITY EDGE_RISING [get_bd_ports "pl2ps_irq_$i"]
+  }
 
 ########################################################################################################
 # Create interconnect and components
@@ -271,6 +297,10 @@ proc cr_bd_design_static { parentCell } {
           PMC_SMAP_PERIPHERAL {{ENABLE 0} {IO {32 Bit}}} \
           PMC_USE_NOC_PMC_AXI0 {1} \
           PMC_USE_PMC_NOC_AXI0 {1} \
+          PS_IRQ_USAGE {{CH0 1} {CH1 1} {CH10 1} {CH11 1} {CH12 1} {CH13 1} {CH14 1} {CH15 1} {CH2 1} {CH3 1} {CH4 1} {CH5 1} {CH6 1} {CH7 1} {CH8 1} {CH9 1}} \
+          PS_PL_CONNECTIVITY_MODE {Custom} \
+          PS_USE_M_AXI_FPD {1} \
+          PS_M_AXI_FPD_DATA_WIDTH {128} \
           PS_USE_STARTUP {1} \
           PS_BOARD_INTERFACE {Custom} \
           PS_CRL_CPM_TOPSW_REF_CTRL_FREQMHZ {1000} \
@@ -350,6 +380,10 @@ proc cr_bd_design_static { parentCell } {
           PMC_SMAP_PERIPHERAL {{ENABLE 0} {IO {32 Bit}}} \
           PMC_USE_NOC_PMC_AXI0 {1} \
           PMC_USE_PMC_NOC_AXI0 {1} \
+          PS_IRQ_USAGE {{CH0 1} {CH1 1} {CH10 1} {CH11 1} {CH12 1} {CH13 1} {CH14 1} {CH15 1} {CH2 1} {CH3 1} {CH4 1} {CH5 1} {CH6 1} {CH7 1} {CH8 1} {CH9 1}} \
+          PS_PL_CONNECTIVITY_MODE {Custom} \
+          PS_USE_M_AXI_FPD {1} \
+          PS_M_AXI_FPD_DATA_WIDTH {128} \
           PS_USE_STARTUP {1} \
           PS_BOARD_INTERFACE {Custom} \
           PS_CRL_CPM_TOPSW_REF_CTRL_FREQMHZ {1000} \
@@ -466,6 +500,11 @@ proc cr_bd_design_static { parentCell } {
   set_property CONFIG.NUM_SI {1} $smartconnect_1
   set_property CONFIG.ADVANCED_PROPERTIES {__experimental_features__ {disable_low_area_mode 1} __view__ {functional {S00_Entry {SUPPORTS_WRAP 1 SUPPORTS_NARROW_BURST 1}}}} $smartconnect_1
 
+  # AXI SmartSwitch, connecting M_AXI_FPD of PS to BD output interfaces
+  set smartconnect_2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_2 ]
+  set_property CONFIG.NUM_SI {1} $smartconnect_2
+  set_property CONFIG.ADVANCED_PROPERTIES {__experimental_features__ {disable_low_area_mode 1} __view__ {functional {S00_Entry {SUPPORTS_WRAP 1 SUPPORTS_NARROW_BURST 1}}}} $smartconnect_2
+
   # Main clock gen
   create_bd_cell -type ip -vlnv xilinx.com:ip:clk_wizard:1.0 clk_wiz_0
   set cmd "set_property -dict \[list \
@@ -545,6 +584,10 @@ proc cr_bd_design_static { parentCell } {
 
   # Debug Hub config
   connect_bd_intf_net [get_bd_intf_pins axi_noc_0/M03_AXI] [get_bd_intf_ports axi_debug_hub]
+
+  # Master AXI FPD --- axi_fpd2pl
+  connect_bd_intf_net [get_bd_intf_pins smartconnect_2/S00_AXI] [get_bd_intf_pins versal_cips_0/M_AXI_FPD]
+  connect_bd_intf_net [get_bd_intf_ports axi_fpd2pl] [get_bd_intf_pins smartconnect_2/M00_AXI]
 ########################################################################################################
 # Create port connections
 ########################################################################################################
@@ -599,6 +642,8 @@ proc cr_bd_design_static { parentCell } {
   connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins axi_noc_0/aclk3] 
   connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins smartconnect_0/aclk]
   connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins smartconnect_1/aclk]
+  connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins smartconnect_2/aclk]
+  connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins versal_cips_0/m_axi_fpd_aclk]
   if {$cnfg(pcie_gen) eq 5} {
     connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins versal_cips_0/dma1_intrfc_clk]
   } elseif {$cnfg(pcie_gen) eq 4} {
@@ -619,6 +664,7 @@ proc cr_bd_design_static { parentCell } {
     # SmartConnect reset
     connect_bd_net [get_bd_pins versal_cips_0/dma1_axi_aresetn] [get_bd_pins smartconnect_0/aresetn]
     connect_bd_net [get_bd_pins versal_cips_0/dma1_axi_aresetn] [get_bd_pins smartconnect_1/aresetn]
+    connect_bd_net [get_bd_pins versal_cips_0/dma1_axi_aresetn] [get_bd_pins smartconnect_2/aresetn]
   } elseif {$cnfg(pcie_gen) eq 4} {
     # System reset
     connect_bd_net [get_bd_pins versal_cips_0/dma0_axi_aresetn] [get_bd_pins proc_sys_reset_s/ext_reset_in] 
@@ -626,6 +672,7 @@ proc cr_bd_design_static { parentCell } {
     # SmartConnect reset
     connect_bd_net [get_bd_pins versal_cips_0/dma0_axi_aresetn] [get_bd_pins smartconnect_0/aresetn]
     connect_bd_net [get_bd_pins versal_cips_0/dma0_axi_aresetn] [get_bd_pins smartconnect_1/aresetn]
+    connect_bd_net [get_bd_pins versal_cips_0/dma0_axi_aresetn] [get_bd_pins smartconnect_2/aresetn]
   } else {
     puts "ERROR: Unsupported PCIe configuration: Gen$cnfg(pcie_gen). Supported configurations for V80 are Gen4x16 and Gen5x8."
     exit 1
@@ -638,6 +685,11 @@ proc cr_bd_design_static { parentCell } {
 
   # EOS
   connect_bd_net [get_bd_pins versal_cips_0/eos] [get_bd_ports eos_pmc]
+
+  # PL-to-PS interrupts
+  for {set i 0} {$i < 16} {incr i} {
+    connect_bd_net [get_bd_ports "pl2ps_irq_$i"] [get_bd_pins "versal_cips_0/pl_ps_irq$i"]
+  }
 
 ########################################################################################################
 # Create address segments
@@ -655,6 +707,11 @@ proc cr_bd_design_static { parentCell } {
   # PMC_NOC_AXI_0 for configuring the Debug Hub IP
   assign_bd_address -offset 0x020240000000 -range 2M -target_address_space [get_bd_addr_spaces versal_cips_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_debug_hub/Reg] -force
   
+  # M_AXI_FPD for PS-to-PL accesses
+  set formatted_axi_fpd2pl_base  [format "0x%llX" [expr {$cnfg(axi_fpd2pl_base)}]]
+  set formatted_axi_fpd2pl_max_offset [format "0x%llX" [expr {$cnfg(axi_fpd2pl_max_offset)}]]
+  assign_bd_address -offset $cnfg(formatted_axi_fpd2pl_base) -range $cnfg(formatted_axi_fpd2pl_max_offset) -target_address_space [get_bd_addr_spaces versal_cips_0/M_AXI_FPD] [get_bd_addr_segs axi_fpd2pl/Reg] -force
+
   # Restore current instance
   current_bd_instance $oldCurInst
 

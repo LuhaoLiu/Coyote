@@ -299,6 +299,14 @@ module cyt_top (
     // AXI Interfaces: config, data & command
     AXI4 axi_main_st2sh ();
 
+{% if cnfg.fpga_arch == 'versal' %}
+    // PL-to-PS interrupts
+    wire [15:0] pl2ps_irq;
+
+    // AXI Interfaces: FPD-to-PL
+    AXI4 #(.AXI4_ADDR_BITS(32), .AXI4_DATA_BITS(128)) axi_fpd2pl;
+{% endif %}
+
     AXI4S axis_dyn_st2sh [N_SCHAN] ();
     AXI4S axis_dyn_sh2st [N_SCHAN] ();
     dmaIntf dma_rd_req_sh2st [N_SCHAN] ();
@@ -391,6 +399,12 @@ module cyt_top (
         // AXI Interfaces: config, data & command
         .m_axi_main(axi_main_st2sh),
 
+        // PL-to-PS interrupts
+        .s_pl2ps_irq(pl2ps_irq),
+
+        // AXI FPD-to-PL interface
+        .m_axi_fpd2pl(axi_fpd2pl),
+
         .m_axis_dyn_out(axis_dyn_st2sh),
         .s_axis_dyn_in(axis_dyn_sh2st),
         .s_dma_rd_req(dma_rd_req_sh2st),
@@ -482,6 +496,52 @@ module cyt_top (
         .s_axi_main_bresp(axi_main_st2sh.bresp),
         .s_axi_main_bready(axi_main_st2sh.bready),
         .s_axi_main_bvalid(axi_main_st2sh.bvalid),
+
+    {% if cnfg.fpga_arch == 'versal' %}
+        // PL-to-PS interrupts
+        .m_pl2ps_irq(pl2ps_irq),
+        
+        // AXI FPD-to-PL interface
+        .s_axi_fpd2pl_araddr(axi_fpd2pl.araddr),
+        .s_axi_fpd2pl_arburst(axi_fpd2pl.arburst),
+        .s_axi_fpd2pl_arcache(axi_fpd2pl.arcache),
+        .s_axi_fpd2pl_arid(axi_fpd2pl.arid),
+        .s_axi_fpd2pl_arlen(axi_fpd2pl.arlen),
+        .s_axi_fpd2pl_arlock(axi_fpd2pl.arlock),
+        .s_axi_fpd2pl_arprot(axi_fpd2pl.arprot),
+        .s_axi_fpd2pl_arqos(axi_fpd2pl.arqos),
+        .s_axi_fpd2pl_arregion(axi_fpd2pl.arregion),
+        .s_axi_fpd2pl_arsize(axi_fpd2pl.arsize),
+        .s_axi_fpd2pl_arready(axi_fpd2pl.arready),
+        .s_axi_fpd2pl_arvalid(axi_fpd2pl.arvalid),
+        .s_axi_fpd2pl_awaddr(axi_fpd2pl.awaddr),
+        .s_axi_fpd2pl_awburst(axi_fpd2pl.awburst),
+        .s_axi_fpd2pl_awcache(axi_fpd2pl.awcache),
+        .s_axi_fpd2pl_awid(axi_fpd2pl.awid),
+        .s_axi_fpd2pl_awlen(axi_fpd2pl.awlen),
+        .s_axi_fpd2pl_awlock(axi_fpd2pl.awlock),
+        .s_axi_fpd2pl_awprot(axi_fpd2pl.awprot),
+        .s_axi_fpd2pl_awqos(axi_fpd2pl.awqos),
+        .s_axi_fpd2pl_awregion(axi_fpd2pl.awregion),
+        .s_axi_fpd2pl_awsize(axi_fpd2pl.awsize),
+        .s_axi_fpd2pl_awready(axi_fpd2pl.awready),
+        .s_axi_fpd2pl_awvalid(axi_fpd2pl.awvalid),
+        .s_axi_fpd2pl_rdata(axi_fpd2pl.rdata),
+        .s_axi_fpd2pl_rid(axi_fpd2pl.rid),
+        .s_axi_fpd2pl_rlast(axi_fpd2pl.rlast),
+        .s_axi_fpd2pl_rresp(axi_fpd2pl.rresp),
+        .s_axi_fpd2pl_rready(axi_fpd2pl.rready),
+        .s_axi_fpd2pl_rvalid(axi_fpd2pl.rvalid),
+        .s_axi_fpd2pl_wdata(axi_fpd2pl.wdata),
+        .s_axi_fpd2pl_wlast(axi_fpd2pl.wlast),
+        .s_axi_fpd2pl_wstrb(axi_fpd2pl.wstrb),
+        .s_axi_fpd2pl_wready(axi_fpd2pl.wready),
+        .s_axi_fpd2pl_wvalid(axi_fpd2pl.wvalid),
+        .s_axi_fpd2pl_bid(axi_fpd2pl.bid),
+        .s_axi_fpd2pl_bresp(axi_fpd2pl.bresp),
+        .s_axi_fpd2pl_bready(axi_fpd2pl.bready),
+        .s_axi_fpd2pl_bvalid(axi_fpd2pl.bvalid),
+    {% endif %}
     
     {% for i in range(0, cnfg.n_schan) %}
         .s_axis_dyn_in_{{ i }}_tvalid (axis_dyn_st2sh[{{ i }}].tvalid),

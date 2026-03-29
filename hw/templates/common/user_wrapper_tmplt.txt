@@ -206,6 +206,50 @@ module design_user_wrapper_{{ c_reg }} (
     (* io_buffer_type = "none" *) output logic                                axis_host_networking_sink_rx_tready,
     (* io_buffer_type = "none" *) input  logic                                axis_host_networking_sink_rx_tvalid,
 {% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    // PL-to-PS interrupts
+
+    {% for k in range(16) %}
+    {% if cnfg['pl2ps_irq_' ~ k ~ '_vfpga'] == c_reg %}
+
+    (* io_buffer_type = "none" *) output pl2ps_irq_{{ k }},
+
+    {% endif %}
+    {% endfor %}
+
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    // AXI FPD-to-PL interface
+
+    {% for k in range(cnfg.n_axi_fpd2pl_valid_regions) %}
+    {% if cnfg['axi_fpd2pl_' ~ k ~ '_vfpga_id'] == c_reg %}
+
+    (* io_buffer_type = "none" *) input  logic [32-1:0]     axi_fpd2pl_awaddr,
+    (* io_buffer_type = "none" *) input  logic [2:0]        axi_fpd2pl_awprot,
+    (* io_buffer_type = "none" *) input  logic              axi_fpd2pl_awvalid,
+    (* io_buffer_type = "none" *) output logic              axi_fpd2pl_awready,
+    (* io_buffer_type = "none" *) input  logic [64-1:0]     axi_fpd2pl_wdata,
+    (* io_buffer_type = "none" *) input  logic [64/8-1:0]   axi_fpd2pl_wstrb,
+    (* io_buffer_type = "none" *) input  logic              axi_fpd2pl_wvalid,
+    (* io_buffer_type = "none" *) output logic              axi_fpd2pl_wready,
+    (* io_buffer_type = "none" *) output logic [1:0]        axi_fpd2pl_bresp,
+    (* io_buffer_type = "none" *) output logic              axi_fpd2pl_bvalid,
+    (* io_buffer_type = "none" *) input  logic              axi_fpd2pl_bready,
+    (* io_buffer_type = "none" *) input  logic [32-1:0]     axi_fpd2pl_araddr,
+    (* io_buffer_type = "none" *) input  logic [2:0]        axi_fpd2pl_arprot,
+    (* io_buffer_type = "none" *) input  logic              axi_fpd2pl_arvalid,
+    (* io_buffer_type = "none" *) output logic              axi_fpd2pl_arready,
+    (* io_buffer_type = "none" *) output logic [64-1:0]     axi_fpd2pl_rdata,
+    (* io_buffer_type = "none" *) output logic [1:0]        axi_fpd2pl_rresp,
+    (* io_buffer_type = "none" *) output logic              axi_fpd2pl_rvalid,
+    (* io_buffer_type = "none" *) input  logic              axi_fpd2pl_rready,
+
+    {% endif %}
+    {% endfor %}
+{% endif %}
+
 {% if cnfg.fpga_arch == 'ultrascale_plus' %}
     // Debug
     (* io_buffer_type = "none" *) input  logic                                S_BSCAN_drck,
@@ -525,6 +569,38 @@ module design_user_wrapper_{{ c_reg }} (
     assign axis_host_networking_src_tx.tready = axis_host_networking_src_tx_tready; 
 
 {% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    // AXI FPD-to-PL
+
+    {% for k in range(cnfg.n_axi_fpd2pl_valid_regions) %}
+    {% if cnfg['axi_fpd2pl_' ~ k ~ '_vfpga_id'] == c_reg %}
+    
+    AXI4L #(.AXI4L_ADDR_BITS(32), .AXI4L_DATA_BITS(64)) axi_fpd2pl (.*);
+    assign axi_fpd2pl.awaddr  = axi_fpd2pl_awaddr;
+    assign axi_fpd2pl.awprot  = axi_fpd2pl_awprot;
+    assign axi_fpd2pl.awvalid = axi_fpd2pl_awvalid;
+    assign axi_fpd2pl.wdata   = axi_fpd2pl_wdata;
+    assign axi_fpd2pl.wstrb   = axi_fpd2pl_wstrb;
+    assign axi_fpd2pl.wvalid  = axi_fpd2pl_wvalid;
+    assign axi_fpd2pl.bready  = axi_fpd2pl_bready;
+    assign axi_fpd2pl.araddr  = axi_fpd2pl_araddr;
+    assign axi_fpd2pl.arprot  = axi_fpd2pl_arprot;
+    assign axi_fpd2pl.arvalid = axi_fpd2pl_arvalid;
+    assign axi_fpd2pl.rready  = axi_fpd2pl_rready;
+    assign axi_fpd2pl_awready = axi_fpd2pl.awready;
+    assign axi_fpd2pl_wready  = axi_fpd2pl.wready;
+    assign axi_fpd2pl_bresp   = axi_fpd2pl.bresp;
+    assign axi_fpd2pl_bvalid  = axi_fpd2pl.bvalid;
+    assign axi_fpd2pl_arready = axi_fpd2pl.arready;
+    assign axi_fpd2pl_rdata   = axi_fpd2pl.rdata;
+    assign axi_fpd2pl_rresp   = axi_fpd2pl.rresp;
+    assign axi_fpd2pl_rvalid  = axi_fpd2pl.rvalid;
+    
+    {% endif %}
+    {% endfor %}
+{% endif %}
+
 {% if cnfg.en_user_reg %}
     // 
     // REG STAGE
@@ -1381,6 +1457,27 @@ module design_user_wrapper_{{ c_reg }} (
         .axis_host_networking_rx(axis_host_networking_sink_rx_user), 
         .axis_host_networking_tx(axis_host_networking_src_tx_user), 
     {% endif %}
+
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+        {% for k in range(16) %}
+        {% if cnfg['pl2ps_irq_' ~ k ~ '_vfpga'] == c_reg %}
+
+        .pl2ps_irq_{{ k }}(pl2ps_irq_{{ k }}),
+
+        {% endif %}
+        {% endfor %}
+    {% endif %}
+
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+        {% for k in range(cnfg.n_axi_fpd2pl_valid_regions) %}
+        {% if cnfg['axi_fpd2pl_' ~ k ~ '_vfpga_id'] == c_reg %}
+
+        .axi_fpd2pl(axi_fpd2pl),
+
+        {% endif %}
+        {% endfor %}
+    {% endif %}
+
         .aclk(aclk),
 	    .aresetn(aresetn)
 	);

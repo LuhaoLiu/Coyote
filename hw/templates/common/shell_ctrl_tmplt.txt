@@ -48,6 +48,11 @@ module shell_ctrl_cc (
     AXI4.s              axi_debug_hub,
 {% endif %}
 
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    AXI4.s              axi_fpd2pl,
+    AXI4L.m             axi_fpd2pls [N_AXI_FPD2PL_VALID_REGIONS],
+{% endif %}
+
     input  logic        xclk,
     input  logic        xresetn,
     output logic        aclk,
@@ -127,6 +132,69 @@ design_ctrl inst_design_ctrl (
     .axi_cnfg_wready(axi_cnfg.wready),
     .axi_cnfg_wstrb(axi_cnfg.wstrb),
     .axi_cnfg_wvalid(axi_cnfg.wvalid),
+
+    {% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    .axi_fpd2pl_araddr(axi_fpd2pl.araddr),
+    .axi_fpd2pl_arburst(axi_fpd2pl.arburst),
+    .axi_fpd2pl_arcache(axi_fpd2pl.arcache),
+    //.axi_fpd2pl_arid(axi_fpd2pl.arid),
+    .axi_fpd2pl_arlen(axi_fpd2pl.arlen),
+    .axi_fpd2pl_arlock(axi_fpd2pl.arlock),
+    .axi_fpd2pl_arprot(axi_fpd2pl.arprot),
+    .axi_fpd2pl_arqos(axi_fpd2pl.arqos),
+    .axi_fpd2pl_arsize(axi_fpd2pl.arsize),
+    .axi_fpd2pl_arready(axi_fpd2pl.arready),
+    .axi_fpd2pl_arvalid(axi_fpd2pl.arvalid),
+    .axi_fpd2pl_awaddr(axi_fpd2pl.awaddr),
+    .axi_fpd2pl_awburst(axi_fpd2pl.awburst),
+    .axi_fpd2pl_awcache(axi_fpd2pl.awcache),
+    //.axi_fpd2pl_awid(axi_fpd2pl.awid),
+    .axi_fpd2pl_awlen(axi_fpd2pl.awlen),
+    .axi_fpd2pl_awlock(axi_fpd2pl.awlock),
+    .axi_fpd2pl_awprot(axi_fpd2pl.awprot),
+    .axi_fpd2pl_awqos(axi_fpd2pl.awqos),
+    .axi_fpd2pl_awsize(axi_fpd2pl.awsize),
+    .axi_fpd2pl_awready(axi_fpd2pl.awready),
+    .axi_fpd2pl_awvalid(axi_fpd2pl.awvalid),
+    //.axi_fpd2pl_bid(axi_fpd2pl.bid),
+    .axi_fpd2pl_bready(axi_fpd2pl.bready),
+    .axi_fpd2pl_bresp(axi_fpd2pl.bresp),
+    .axi_fpd2pl_bvalid(axi_fpd2pl.bvalid),
+    .axi_fpd2pl_rdata(axi_fpd2pl.rdata),
+    //.axi_fpd2pl_rid(axi_fpd2pl.rid),
+    .axi_fpd2pl_rlast(axi_fpd2pl.rlast),
+    .axi_fpd2pl_rready(axi_fpd2pl.rready),
+    .axi_fpd2pl_rresp(axi_fpd2pl.rresp),
+    .axi_fpd2pl_rvalid(axi_fpd2pl.rvalid),
+    .axi_fpd2pl_wdata(axi_fpd2pl.wdata),
+    .axi_fpd2pl_wlast(axi_fpd2pl.wlast),
+    .axi_fpd2pl_wready(axi_fpd2pl.wready),
+    .axi_fpd2pl_wstrb(axi_fpd2pl.wstrb),
+    .axi_fpd2pl_wvalid(axi_fpd2pl.wvalid),
+
+    {% for i in range(0, cnfg.n_axi_fpd2pl_valid_regions) %}
+    .axi_fpd2pls_{{ i }}_araddr(axi_fpd2pls[{{ i }}].araddr),
+    .axi_fpd2pls_{{ i }}_arprot(axi_fpd2pls[{{ i }}].arprot),
+    .axi_fpd2pls_{{ i }}_arready(axi_fpd2pls[{{ i }}].arready),
+    .axi_fpd2pls_{{ i }}_arvalid(axi_fpd2pls[{{ i }}].arvalid),
+    .axi_fpd2pls_{{ i }}_awaddr(axi_fpd2pls[{{ i }}].awaddr),
+    .axi_fpd2pls_{{ i }}_awprot(axi_fpd2pls[{{ i }}].awprot),
+    .axi_fpd2pls_{{ i }}_awready(axi_fpd2pls[{{ i }}].awready),
+    .axi_fpd2pls_{{ i }}_awvalid(axi_fpd2pls[{{ i }}].awvalid),
+    .axi_fpd2pls_{{ i }}_bready(axi_fpd2pls[{{ i }}].bready),
+    .axi_fpd2pls_{{ i }}_bresp(axi_fpd2pls[{{ i }}].bresp),
+    .axi_fpd2pls_{{ i }}_bvalid(axi_fpd2pls[{{ i }}].bvalid),
+    .axi_fpd2pls_{{ i }}_rdata(axi_fpd2pls[{{ i }}].rdata),
+    .axi_fpd2pls_{{ i }}_rready(axi_fpd2pls[{{ i }}].rready),
+    .axi_fpd2pls_{{ i }}_rresp(axi_fpd2pls[{{ i }}].rresp),
+    .axi_fpd2pls_{{ i }}_rvalid(axi_fpd2pls[{{ i }}].rvalid),
+    .axi_fpd2pls_{{ i }}_wdata(axi_fpd2pls[{{ i }}].wdata),
+    .axi_fpd2pls_{{ i }}_wready(axi_fpd2pls[{{ i }}].wready),
+    .axi_fpd2pls_{{ i }}_wstrb(axi_fpd2pls[{{ i }}].wstrb),
+    .axi_fpd2pls_{{ i }}_wvalid(axi_fpd2pls[{{ i }}].wvalid),
+    {% endfor %}
+
+    {% endif %}
 
 {% for i in range(0, cnfg.n_reg) %}
     .axi_ctrl_{{ i }}_araddr(axi_ctrl[{{ i }}].araddr),

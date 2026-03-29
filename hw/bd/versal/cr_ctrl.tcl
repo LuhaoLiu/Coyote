@@ -147,6 +147,38 @@ proc cr_bd_design_ctrl { parentCell } {
     }
   }
 
+  if {$cnfg(en_axi_fpd2pl) eq 1} {
+    set axi_fpd2pl [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:aximm_rtl:1.0 axi_fpd2pl ]
+    set_property -dict [ list \
+      CONFIG.ADDR_WIDTH {32} \
+      CONFIG.DATA_WIDTH {128} \
+      CONFIG.HAS_BRESP {1} \
+      CONFIG.HAS_BURST {1} \
+      CONFIG.HAS_CACHE {1} \
+      CONFIG.HAS_LOCK {1} \
+      CONFIG.HAS_PROT {1} \
+      CONFIG.HAS_QOS {1} \
+      CONFIG.HAS_REGION {1} \
+      CONFIG.HAS_RRESP {1} \
+      CONFIG.HAS_WSTRB {1} \
+      CONFIG.NUM_READ_OUTSTANDING {4} \
+      CONFIG.NUM_WRITE_OUTSTANDING {4} \
+      CONFIG.PROTOCOL {AXI4} \
+      CONFIG.READ_WRITE_MODE {READ_WRITE} \
+    ] $axi_fpd2pl
+
+    for {set i 0} {$i < $cnfg(n_axi_fpd2pl_valid_regions)} {incr i} {    
+      set cmd "set axi_fpd2pls_$i \[ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 axi_fpd2pls_$i ]
+                set_property -dict \[ list \
+                CONFIG.ADDR_WIDTH {32} \
+                CONFIG.DATA_WIDTH {64} \
+                CONFIG.PROTOCOL {AXI4LITE} \
+                CONFIG.READ_WRITE_MODE {READ_WRITE} \
+              ] \$axi_fpd2pls_$i"
+      eval $cmd
+    }
+  }
+
 ########################################################################################################
 # Create ports
 ########################################################################################################
@@ -236,6 +268,19 @@ proc cr_bd_design_ctrl { parentCell } {
   eval $cmd 
   set_property CONFIG.ADVANCED_PROPERTIES {__experimental_features__ {disable_low_area_mode 1} __view__ {functional {S00_Entry {SUPPORTS_WRAP 1 SUPPORTS_NARROW_BURST 1}}}} $axi_interconnect_0
   
+  # AXI interconnect for FPD to PL
+  if {$cnfg(en_axi_fpd2pl) eq 1} {
+    set ic1_mi [expr {$cnfg(n_axi_fpd2pl_valid_regions)}]
+    set axi_interconnect_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 axi_interconnect_1 ]
+    set cmd "set_property -dict \[list \
+      CONFIG.NUM_CLKS {2} \
+      CONFIG.NUM_MI {$ic1_mi} \
+      CONFIG.NUM_SI {1} \
+    ] \[get_bd_cells axi_interconnect_1]"
+    eval $cmd 
+    set_property CONFIG.ADVANCED_PROPERTIES {__experimental_features__ {disable_low_area_mode 1} __view__ {functional {S00_Entry {SUPPORTS_WRAP 1 SUPPORTS_NARROW_BURST 1}}}} $axi_interconnect_1
+  }
+
   # Clocking
   create_bd_cell -type ip -vlnv xilinx.com:ip:clk_wizard:1.0 clk_wiz_0
   set cmd "set_property -dict \[list \
@@ -267,6 +312,17 @@ proc cr_bd_design_ctrl { parentCell } {
   connect_bd_intf_net -intf_net axi_interconnect_0_M00_AXI [get_bd_intf_ports axi_cnfg] [get_bd_intf_pins axi_interconnect_0/M00_AXI]
   connect_bd_intf_net -intf_net axi_interconnect_0_S00_AXI [get_bd_intf_ports axi_main] [get_bd_intf_pins axi_interconnect_0/S00_AXI]
 
+  # connect axi_fpd2pl to m_axi_fpd2pls
+  if {$cnfg(en_axi_fpd2pl) eq 1} {
+    connect_bd_intf_net -intf_net axi_interconnect_1_S00_AXI [get_bd_intf_ports axi_fpd2pl] [get_bd_intf_pins axi_interconnect_1/S00_AXI]
+    
+    for {set i 0} {$i < $cnfg(n_axi_fpd2pl_valid_regions)} {incr i} {
+      set port_name "axi_fpd2pls_$i"
+      set mi_name [format "M%02d_AXI" $i]
+      connect_bd_intf_net -intf_net [get_bd_intf_ports $port_name] [get_bd_intf_pins smc_fpd2pl/$mi_name]
+    }
+  }
+
   if {$cnfg(en_avx) eq 1} {
     for {set i 0}  {$i < $cnfg(n_reg)} {incr i} { 
       set j [expr {$i*2 + 1}]
@@ -293,6 +349,11 @@ proc cr_bd_design_ctrl { parentCell } {
 ########################################################################################################
   connect_bd_net [get_bd_ports xclk] [get_bd_pins axi_interconnect_0/aclk]
   connect_bd_net [get_bd_ports xresetn] [get_bd_pins axi_interconnect_0/aresetn]
+
+  if {$cnfg(en_axi_fpd2pl) eq 1} {
+    connect_bd_net [get_bd_ports xclk] [get_bd_pins axi_interconnect_1/aclk]
+    connect_bd_net [get_bd_ports xresetn] [get_bd_pins axi_interconnect_1/aresetn]
+  }
   
   if {$cnfg(en_pr) eq 0} {
     connect_bd_net [get_bd_ports xclk] [get_bd_pins axi_dbg_hub_0/aclk]
@@ -316,6 +377,10 @@ proc cr_bd_design_ctrl { parentCell } {
   
   connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_ports aclk]
   connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins axi_interconnect_0/aclk1]
+
+  if {$cnfg(en_axi_fpd2pl) eq 1} {
+    connect_bd_net [get_bd_pins clk_wiz_0/clk_out1] [get_bd_pins axi_interconnect_1/aclk1]
+  }
   
 ########################################################################################################
 # Create address segments
@@ -339,6 +404,19 @@ proc cr_bd_design_ctrl { parentCell } {
 
   if {$cnfg(en_pr) eq 0} {
     assign_bd_address -offset 0x020240000000 -range 2M -target_address_space [get_bd_addr_spaces axi_debug_hub] [get_bd_addr_segs axi_dbg_hub_0/S_AXI_DBG_HUB/Mem0] -force
+  }
+
+  # Address segments for FPD to PL control
+  if {$cnfg(en_axi_fpd2pl) eq 1} {
+    for {set i 0} {$i < $cnfg(n_axi_fpd2pl_valid_regions)} {incr i} {
+      set port_name "axi_fpd2pls_$i"
+      set formatted_addr [format "0x%llX" [expr {$cnfg(axi_fpd2pl_base) + $cnfg(axi_fpd2pl_${i}_offset)}]]
+      set formatted_size [format "0x%llX" $cnfg(axi_fpd2pl_${i}_size)]
+
+      set formatted_target_seg [format "SEG_%s\_Reg" $port_name]
+      create_bd_addr_seg -range $formatted_size -offset $formatted_addr [get_bd_addr_spaces /axi_fpd2pl] [get_bd_addr_segs $port_name/Reg] $formatted_target_seg
+      # assign_bd_address [get_bd_addr_segs $formatted_target_seg] -force
+    }
   }
   
   validate_bd_design

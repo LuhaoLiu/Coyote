@@ -52,6 +52,7 @@
 {% endif %}
 {% if cnfg.fpga_arch =='versal' %}
 `define NET_DCMAC
+`define VERSAL_ARCH
 {% endif %}
 {% if cnfg.en_rdma %}
 `define EN_RDMA
@@ -74,6 +75,15 @@
 {% if cnfg.en_net %}
 `define EN_NET
 {% endif %}
+{% if cnfg.en_ps_pl_if %}
+`define EN_PS_PL_IF
+{% endif %} 
+{% if cnfg.en_pl2ps_irq %}
+`define EN_PL2PS_IRQ
+{% endif %} 
+{% if cnfg.en_axi_fpd2pl %}
+`define EN_AXI_FPD2PL
+{% endif %} 
 {% if cnfg.en_nclk %}
 `define EN_NCLK
 {% endif %}
@@ -414,6 +424,11 @@ package lynxTypes;
     localparam integer BLOCK_MEM_IMPL_EN = 1;
     {% else %}
     localparam integer BLOCK_MEM_IMPL_EN = 0;
+    {% endif %}
+
+    // PS (ARM cores)
+    {% if cnfg.en_axi_fpd2pl %}
+    localparam integer N_AXI_FPD2PL_VALID_REGIONS = {{ cnfg.n_axi_fpd2pl_valid_regions }}
     {% endif %}
 
     // ========================---------------------------------------------

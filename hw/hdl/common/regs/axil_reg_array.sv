@@ -32,7 +32,9 @@ import lynxTypes::*;
 `include "axi_macros.svh"
 
 module axil_reg_array #(
-    parameter integer                       N_STAGES = 2
+    parameter integer                       N_STAGES = 2,
+    parameter integer                       DATA_BITS = AXIL_DATA_BITS,
+    parameter integer                       ADDR_BITS = AXI_ADDR_BITS
 ) (
     input  logic                            aclk,
     input  logic                            aresetn,
@@ -44,13 +46,17 @@ module axil_reg_array #(
 // ----------------------------------------------------------------------------------------------------------------------- 
 // Register slices
 // ----------------------------------------------------------------------------------------------------------------------- 
-AXI4L axi_s [N_STAGES+1] (.*);
+AXI4L #(.AXI4L_DATA_BITS(DATA_BITS), .AXI4L_ADDR_BITS(ADDR_BITS)) axi_s [N_STAGES+1] (.*);
 
 `AXIL_ASSIGN(s_axi, axi_s[0])
 `AXIL_ASSIGN(axi_s[N_STAGES], m_axi)
 
 for(genvar i = 0; i < N_STAGES; i++) begin
-    axil_reg inst_reg (.aclk(aclk), .aresetn(aresetn), .s_axi(axi_s[i]), .m_axi(axi_s[i+1]));  
+    if (DATA_BITS == 64 && ADDR_BITS == 32) begin
+        axil_reg_64_32 inst_reg_64_32 (.aclk(aclk), .aresetn(aresetn), .s_axi(axi_s[i]), .m_axi(axi_s[i+1]));
+    end else begin
+        axil_reg inst_reg (.aclk(aclk), .aresetn(aresetn), .s_axi(axi_s[i]), .m_axi(axi_s[i+1]));  
+    end
 end
 
 endmodule

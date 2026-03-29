@@ -104,6 +104,52 @@ module shell_top (
     (* io_buffer_type = "none" *) input  logic                              s_axi_main_bready,
     (* io_buffer_type = "none" *) output logic                              s_axi_main_bvalid,
 
+{% if cnfg.fpga_arch == 'versal' %}
+    // PL-to-PS interrupts
+    (* io_buffer_type = "none" *) output wire [15:0]                        m_pl2ps_irq,
+
+    // AXI FPD-to-PL interface
+    (* io_buffer_type = "none" *) input  logic[31:0]    	                s_axi_fpd2pl_araddr,
+    (* io_buffer_type = "none" *) input  logic[1:0]		                    s_axi_fpd2pl_arburst,
+    (* io_buffer_type = "none" *) input  logic[3:0]		                    s_axi_fpd2pl_arcache,
+    (* io_buffer_type = "none" *) input  logic[AXI_ID_BITS-1:0]             s_axi_fpd2pl_arid,
+    (* io_buffer_type = "none" *) input  logic[7:0]		                    s_axi_fpd2pl_arlen,
+    (* io_buffer_type = "none" *) input  logic[0:0]		                    s_axi_fpd2pl_arlock,
+    (* io_buffer_type = "none" *) input  logic[2:0]		                    s_axi_fpd2pl_arprot,
+    (* io_buffer_type = "none" *) input  logic[3:0]		                    s_axi_fpd2pl_arqos,
+    (* io_buffer_type = "none" *) input  logic[3:0]		                    s_axi_fpd2pl_arregion,
+    (* io_buffer_type = "none" *) input  logic[2:0]		                    s_axi_fpd2pl_arsize,
+    (* io_buffer_type = "none" *) output logic			                    s_axi_fpd2pl_arready,
+    (* io_buffer_type = "none" *) input  logic			                    s_axi_fpd2pl_arvalid,
+    (* io_buffer_type = "none" *) input  logic[31:0]    	                s_axi_fpd2pl_awaddr,
+    (* io_buffer_type = "none" *) input  logic[1:0]		                    s_axi_fpd2pl_awburst,
+    (* io_buffer_type = "none" *) input  logic[3:0]		                    s_axi_fpd2pl_awcache,
+    (* io_buffer_type = "none" *) input  logic[AXI_ID_BITS-1:0]             s_axi_fpd2pl_awid,
+    (* io_buffer_type = "none" *) input  logic[7:0]		                    s_axi_fpd2pl_awlen,
+    (* io_buffer_type = "none" *) input  logic[0:0]		                    s_axi_fpd2pl_awlock,
+    (* io_buffer_type = "none" *) input  logic[2:0]		                    s_axi_fpd2pl_awprot,
+    (* io_buffer_type = "none" *) input  logic[3:0]		                    s_axi_fpd2pl_awqos,
+    (* io_buffer_type = "none" *) input  logic[3:0]		                    s_axi_fpd2pl_awregion,
+    (* io_buffer_type = "none" *) input  logic[2:0]		                    s_axi_fpd2pl_awsize,
+    (* io_buffer_type = "none" *) output logic			                    s_axi_fpd2pl_awready,
+    (* io_buffer_type = "none" *) input  logic			                    s_axi_fpd2pl_awvalid,
+    (* io_buffer_type = "none" *) output logic[127:0]                       s_axi_fpd2pl_rdata,
+    (* io_buffer_type = "none" *) output logic[AXI_ID_BITS-1:0]             s_axi_fpd2pl_rid,
+    (* io_buffer_type = "none" *) output logic                              s_axi_fpd2pl_rlast,
+    (* io_buffer_type = "none" *) output logic[1:0]                         s_axi_fpd2pl_rresp,
+    (* io_buffer_type = "none" *) input  logic                              s_axi_fpd2pl_rready,
+    (* io_buffer_type = "none" *) output logic                              s_axi_fpd2pl_rvalid,
+    (* io_buffer_type = "none" *) input  logic[127:0]                       s_axi_fpd2pl_wdata,
+    (* io_buffer_type = "none" *) input  logic                              s_axi_fpd2pl_wlast,
+    (* io_buffer_type = "none" *) input  logic[15:0]                        s_axi_fpd2pl_wstrb,
+    (* io_buffer_type = "none" *) output logic                              s_axi_fpd2pl_wready,
+    (* io_buffer_type = "none" *) input  logic                              s_axi_fpd2pl_wvalid,
+    (* io_buffer_type = "none" *) output logic[AXI_ID_BITS-1:0]             s_axi_fpd2pl_bid,
+    (* io_buffer_type = "none" *) output logic[1:0]                         s_axi_fpd2pl_bresp,
+    (* io_buffer_type = "none" *) input  logic                              s_axi_fpd2pl_bready,
+    (* io_buffer_type = "none" *) output logic                              s_axi_fpd2pl_bvalid,
+{% endif %}
+
     // AXIS
     {% for i in range(0, cnfg.n_schan) %}
     (* io_buffer_type = "none" *) input  logic[AXI_DATA_BITS-1:0]           s_axis_dyn_in_{{ i }}_tdata,
@@ -424,6 +470,19 @@ module shell_top (
     `AXI_ASSIGN_S2I(s_axi_debug_hub, s_axi_debug_hub)
     {% endif %}
 
+    // For versal devices: PL-PS interfaces
+    {% if cnfg.fpga_arch == 'versal' %}
+    AXI4 #(.AXI4_ADDR_BITS(32), .AXI4_DATA_BITS(128)) s_axi_fpd2pl();
+    `AXI_ASSIGN_S2I(s_axi_fpd2pl, s_axi_fpd2pl)
+
+        {% if cnfg.en_axi_fpd2pl %}
+        AXI4L #(.AXI4L_ADDR_BITS(32), .AXI4L_DATA_BITS(64)) axi_fpd2pls [N_AXI_FPD2PL_VALID_REGIONS] ();
+        {% else %}
+        always_comb s_axi_fpd2pl.tie_off_s();
+        {% endif %}
+
+    {% endif %}
+
     shell_ctrl_cc inst_shell_ctrl_cc (
         .xclk(xclk),
         .xresetn(xresetn),
@@ -438,6 +497,11 @@ module shell_top (
 
         {% if cnfg.fpga_arch == 'versal' and not cnfg.en_pr %}
         .axi_debug_hub(s_axi_debug_hub),
+        {% endif %}
+
+        {% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+        .axi_fpd2pl(s_axi_fpd2pl),
+        .axi_fpd2pls(axi_fpd2pls),
         {% endif %}
 
         .axi_main(s_axi_main),
@@ -546,12 +610,27 @@ module shell_top (
     metaIntf #(.STYPE(wback_t)) wback ();
 {% endif %}
 
+{% if cnfg.fpga_arch == 'versal' %}
+
+    {% if cnfg.en_pl2ps_irq %}
+    logic [15:0] pl2ps_irq;
+    {% else %}
+    assign m_pl2ps_irq = 16'b0;
+    {% endif %}
+
+{% endif %}
+
     shell_data_cc #(
         .N_STAGES_0(N_REG_SHELL_S0),
         .N_STAGES_1(N_REG_SHELL_S1)
     ) inst_shell_data_cc (
         .s_usr_irq(usr_irq),
         .m_usr_irq(m_usr_irq),
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+        .s_pl2ps_irq(pl2ps_irq),
+        .m_pl2ps_irq(m_pl2ps_irq),
+{% endif %}
 
         .s_axis_dyn_in(s_axis_dyn_in),
         .m_axis_dyn_in(axis_dyn_in_int),
@@ -1545,6 +1624,15 @@ module shell_top (
 {% endif %}
         .s_decouple_sw(decouple[0+:{{ cnfg.n_reg }}]),
         .m_usr_irq(usr_irq[0+:{{ cnfg.n_reg }}]),
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+        .m_pl2ps_irq(pl2ps_irq[15:0]),
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+        .s_axi_fpd2pls(axi_fpd2pls),
+{% endif %}
+
 {% if cnfg.fpga_arch == 'ultrascale_plus' %}
         .S_BSCAN_drck(m_bscan_drck),
         .S_BSCAN_shift(m_bscan_shift),

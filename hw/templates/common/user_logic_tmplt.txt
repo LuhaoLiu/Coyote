@@ -94,6 +94,29 @@ module design_user_logic_c{{ c_cnfg }}_{{ c_reg }} (
     AXI4SR.s                    axis_host_networking_rx, 
     AXI4SR.m                    axis_host_networking_tx, 
 {% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_pl2ps_irq %}
+    {% for k in range(16) %}
+    {% if cnfg['pl2ps_irq_' ~ k ~ '_vfpga'] == c_reg %}
+    
+    // PL-to-PS interrupts
+    output                      pl2ps_irq_{{ k }},
+
+    {% endif %}
+    {% endfor %}
+{% endif %}
+
+{% if cnfg.fpga_arch == 'versal' and cnfg.en_axi_fpd2pl %}
+    {% for k in range(cnfg.n_axi_fpd2pl_valid_regions) %}
+    {% if cnfg['axi_fpd2pl_' ~ k ~ '_vfpga_id'] == c_reg %}
+
+    // AXI FPD-to-PL interface
+    AXI4L.s                     axi_fpd2pl,
+
+    {% endif %}
+    {% endfor %}
+{% endif %}
+
     // Clock and reset
     input  wire                 aclk,
     input  wire[0:0]            aresetn

@@ -33,6 +33,7 @@ import lynxTypes::*;
 module axi_decoupler_static #(
 	parameter integer ID_BITS = AXI_ID_BITS,
     parameter integer DATA_BITS = AXI_DATA_BITS,
+	parameter integer ADDR_BITS = AXI_ADDR_BITS,
 	parameter integer EN_DCPL = 1
 ) (
 	input  logic 					decouple,
@@ -46,7 +47,7 @@ module axi_decoupler_static #(
 // ----------------------------------------------------------------------------------------------------------------------- 
 if(EN_DCPL == 1) begin
 
-logic[AXI_ADDR_BITS-1:0] 			s_axi_araddr;
+logic[ADDR_BITS-1:0] 		    	s_axi_araddr;
 logic[1:0]							s_axi_arburst;
 logic[3:0]							s_axi_arcache;
 logic[ID_BITS-1:0]					s_axi_arid;
@@ -58,7 +59,7 @@ logic[3:0]							s_axi_arregion;
 logic[2:0]							s_axi_arsize;
 logic								s_axi_arready;
 logic								s_axi_arvalid;
-logic[AXI_ADDR_BITS-1:0] 			s_axi_awaddr;
+logic[ADDR_BITS-1:0] 			    s_axi_awaddr;
 logic[1:0]							s_axi_awburst;
 logic[3:0]							s_axi_awcache;
 logic[ID_BITS-1:0]					s_axi_awid;
@@ -86,7 +87,7 @@ logic[1:0]							s_axi_bresp;
 logic								s_axi_bready;
 logic								s_axi_bvalid;
 
-logic[AXI_ADDR_BITS-1:0] 			m_axi_araddr;
+logic[ADDR_BITS-1:0] 		     	m_axi_araddr;
 logic[1:0]							m_axi_arburst;
 logic[3:0]							m_axi_arcache;
 logic[ID_BITS-1:0]					m_axi_arid;
@@ -98,7 +99,7 @@ logic[3:0]							m_axi_arregion;
 logic[2:0]							m_axi_arsize;
 logic								m_axi_arready;
 logic								m_axi_arvalid;
-logic[AXI_ADDR_BITS-1:0] 			m_axi_awaddr;
+logic[ADDR_BITS-1:0] 	    		m_axi_awaddr;
 logic[1:0]							m_axi_awburst;
 logic[3:0]							m_axi_awcache;
 logic[ID_BITS-1:0]					m_axi_awid;

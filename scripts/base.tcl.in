@@ -179,6 +179,11 @@ set cfg(sim_clock_period)       ${SIM_CLOCK_PERIOD}
 set cfg(data_dest_bits)         ${DATA_DEST_BITS}
 set cfg(vaddr_bits)             ${VADDR_BITS}
 
+set cfg(en_ps_pl_if)            ${EN_PS_PL_IF}
+set cfg(en_pl2ps_irq)           ${EN_PL2PS_IRQ}
+set cfg(en_axi_fpd2pl)          ${EN_AXI_FPD2PL}
+@CIPS_BASE_TCL_DYNAMIC_CONFIG@
+
 ########################################################################################################
 # UTIL
 ########################################################################################################

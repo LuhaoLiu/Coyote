@@ -27,7 +27,7 @@
 ################################################################
 # CHECK VIVADO VERSION CHECK
 ################################################################
-# This BD only suppors DCMAC v3.0 which with the new GT IP; only supported in Vivado 2025.1
+# This BD only suppors DCMAC v3.0+ which with the new GT IP; only supported in Vivado 2025.1
 set scripts_vivado_version 2025.1
 set current_vivado_version [version -short]
 
@@ -48,7 +48,7 @@ if { $bCheckIPs == 1 } {
 xilinx.com:ip:gtwiz_versal:1.0\
 xilinx.com:ip:util_ds_buf:2.2\
 xilinx.com:ip:xlconstant:1.1\
-xilinx.com:ip:dcmac:3.0\
+xilinx.com:ip:dcmac:3.1\
 xilinx.com:ip:axis_data_fifo:2.0\
 xilinx.com:ip:axis_dwidth_converter:1.1\
 xilinx.com:ip:bufg_gt:1.0\
@@ -220,11 +220,8 @@ proc create_hier_cell_bd_clock_reset_ctrl { parentCell nameHier } {
   [get_bd_pins dcmac_reset_ctrl/async_resetn]
   connect_bd_net -net bufgt_dcmac_usrclk  [get_bd_pins bufgt_dcmac/usrclk] \
   [get_bd_pins clk_wizard_dcmac/clk_in1]
-  connect_bd_net -net clk_wizard_dcmac_clk_out1  [get_bd_pins clk_wizard_dcmac/clk_out1] \
-  [get_bd_pins dcmac_core_clk]
-  connect_bd_net -net clk_wizard_dcmac_clk_out2  [get_bd_pins clk_wizard_dcmac/clk_out2] \
-  [get_bd_pins dcmac_axis_clk] \
-  [get_bd_pins dcmac_reset_ctrl/dcmac_clk]
+  connect_bd_net [get_bd_pins clk_wizard_dcmac/clk_out1] [get_bd_pins dcmac_core_clk] [get_bd_pins dcmac_reset_ctrl/dcmac_core_clk]
+  connect_bd_net [get_bd_pins clk_wizard_dcmac/clk_out2] [get_bd_pins dcmac_axis_clk] [get_bd_pins dcmac_reset_ctrl/dcmac_axis_clk]
   connect_bd_net -net clk_wizard_dcmac_clk_out3  [get_bd_pins clk_wizard_dcmac/clk_out3] \
   [get_bd_pins sys_clk] \
   [get_bd_pins dcmac_reset_ctrl/sys_clk]
@@ -503,7 +500,7 @@ proc create_hier_cell_dcmac_wrapper { parentCell nameHier } {
   create_bd_pin -dir I -type clk ts_axil_clk
 
   # Create instance: dcmac, and set properties
-  set dcmac [ create_bd_cell -type ip -vlnv xilinx.com:ip:dcmac:3.0 dcmac ]
+  set dcmac [ create_bd_cell -type ip -vlnv xilinx.com:ip:dcmac:3.1 dcmac ]
   set_property -dict [list \
     CONFIG.DCMAC_LOCATION_C0 {DCMAC_X1Y1} \
     CONFIG.GT_REF_CLK_FREQ_C0 {322.265625} \

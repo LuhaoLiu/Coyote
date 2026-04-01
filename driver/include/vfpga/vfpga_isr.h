@@ -35,6 +35,10 @@
 #include "fpga_hmm.h"
 #endif
 
+#ifdef EN_SCENIC
+#include "vfpga_net.h"
+#endif
+
 /**
  * @brief Top-level vFPGA interrupt routine; registered during set-up in msix_irq_setup(...)
  *

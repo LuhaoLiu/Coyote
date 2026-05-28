@@ -44,6 +44,9 @@ set(N_REGIONS 1)
 
 # Since timing closure with HBM can be difficult, run place and route with optimizations 
 set(BUILD_OPT 1)
+set(BUILD_STATIC 1)
+set(BUILD_SHELL 0)
+set(EN_SHELL_PBLOCK 0)
 
 # Confirm that the selected options are allowed
 validation_checks_hw()

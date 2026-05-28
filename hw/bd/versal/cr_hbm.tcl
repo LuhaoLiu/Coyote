@@ -25,7 +25,7 @@
 ######################################################################################
 
 # Utility block for HBM AXI clock cross (CC) & data width conversion (DWC)
-# The NoC inputs cannot be wider than 256 bits, so do a clock crossing and a data width conversion through a SmartConnect
+# The HBM NoC inputs cannot be wider than 256 bits, so do a clock crossing and a data width conversion through a SmartConnect
 proc cr_bd_hbm_cc_dwc { parentCell } {
    upvar #0 cfg cnfg
 

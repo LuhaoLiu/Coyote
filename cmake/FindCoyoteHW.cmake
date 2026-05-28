@@ -417,9 +417,9 @@ macro(validation_checks_hw)
             set(FPGA_ARCH "versal")
             set(FPGA_PART xcv80-lsva4737-2MHP-e-S CACHE STRING "FPGA Part" FORCE)
         
-            # TODO (Versal): The V80 also includes DDR memory, which we could support in the future
-            set(DDR_SIZE 0)
-            set(N_DDR_CHAN 0)
+            # 4GB on-board DDR chip only
+            set(DDR_SIZE 32)
+            set(N_DDR_CHAN 1)
             
             # HBM configuration
             set(HCLK_F 400)
@@ -428,7 +428,7 @@ macro(validation_checks_hw)
             # Striping for unified HBM implementation
             set(MC_SIZE 30)
             set(N_STRIPE_CHAN 32)
-            set(MEM_OFFSET 274877906944) # 0x4000000000 ~ 256 GiB
+            set(MEM_OFFSET 274877906944) # 0x4000000000 ~ 256 GiB (HBM)
 
             if (BUILD_SHELL OR BUILD_APP) 
                 message(" ** V80 with BUILD_SHELL=1 or BUILD_APP=1 selected, ignoring static layer clock frequency setting (SCLK_F) and defaulting to 333 MHz")
@@ -447,10 +447,10 @@ macro(validation_checks_hw)
         ##
         ## DDR and HBM support
         ## ! u280 has both DDR and HBM, HBM enabled by default; if DDR is required add u280 in DDR_DEV and remove it from HBM_DEV
-        ## ! v80 has both DDR and HBM, HBM is enabled by default and supported; DDR not supported yet
+        ## ! v80 has both DDR and HBM, HBM is enabled by default; if DDR is required add v80 in DDR_DEV and remove it from HBM_DEV
         ##
-        set(DDR_DEV "u250")
-        set(HBM_DEV "u55c" "u280" "v80")
+        set(DDR_DEV "u250" "v80")
+        set(HBM_DEV "u55c" "u280")
 
         list(FIND DDR_DEV ${FDEV_NAME} TMP_DEV)
         if(NOT TMP_DEV EQUAL -1)
@@ -465,6 +465,18 @@ macro(validation_checks_hw)
         else()
             set(AV_HBM 0)
         endif()
+
+        ## For V80, MEM_OFFSET differs depending on the memory type, so special configuration is needed here
+        if(FDEV_NAME STREQUAL "v80")
+            if(AV_DDR AND NOT AV_HBM)
+                set(MEM_OFFSET 5497558138880) # 0x500_0000_0000
+            elseif(AV_HBM AND NOT AV_DDR)
+                set(MEM_OFFSET 274877906944) # 0x40_0000_0000
+            elseif(AV_DDR AND AV_HBM)
+                message(FATAL_ERROR "Invalid memory configuration for the V80 device.")
+            endif()
+        endif()
+
 
         ##
         ## User logic

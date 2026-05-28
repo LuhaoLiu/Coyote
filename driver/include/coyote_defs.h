@@ -350,11 +350,18 @@ extern bool en_hmm;
 // regular pages and the other half of the PC port is allocated to huge pages.
 // However, N_SMALL_CHUNKS and N_LARGE_CHUNKS can be changed as needed.
 #ifdef PLATFORM_VERSAL
-    #define N_MEM_BLOCKS 64                                 // 32 PCs with 2 ports each
-    #define MEM_BLOCK_SIZE (512UL * 1024UL * 1024UL)        // 512 MB per port per PC
-    #define MEM_START (256UL * 1024UL * 1024UL * 1024UL)
-    #define N_SMALL_CHUNKS (64UL * 1024UL)
-    #define N_LARGE_CHUNKS (64UL * 1024UL)
+// HBM
+    // #define N_MEM_BLOCKS 64                                 // 32 PCs with 2 ports each
+    // #define MEM_BLOCK_SIZE (512UL * 1024UL * 1024UL)        // 512 MB per port per PC
+    // #define MEM_START (256UL * 1024UL * 1024UL * 1024UL)
+    // #define N_SMALL_CHUNKS (64UL * 1024UL)
+    // #define N_LARGE_CHUNKS (64UL * 1024UL)
+// DDR
+    #define N_MEM_BLOCKS 1
+    #define MEM_BLOCK_SIZE (4UL * 1024UL * 1024UL * 1024UL)        // 4 GB for DDR
+    #define MEM_START (5UL * 1024UL * 1024UL * 1024UL * 1024UL)
+    #define N_SMALL_CHUNKS (512UL * 1024UL)
+    #define N_LARGE_CHUNKS (512UL * 1024UL)
 #endif
 
 // Reconfiguration constants

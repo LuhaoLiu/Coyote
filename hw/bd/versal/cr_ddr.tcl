@@ -105,8 +105,7 @@ proc cr_bd_design_ddr { parentCell } {
 ########################################################################################################
 # Create interface ports
 ########################################################################################################
-   set n_outsanding [expr {$cnfg(n_outs) * $cnfg(pmtu) / $cnfg(stripe_frag_size)}] 
-   # Check cr_hbm.tcl for explanation
+   set n_outsanding [expr {$cnfg(n_outs)}] 
 
    # AXI-MM ports
    for {set i 0}  {$i < $cnfg(n_mem_chan)} {incr i} {   
@@ -174,7 +173,7 @@ proc cr_bd_design_ddr { parentCell } {
 # Create components
 ########################################################################################################
 
-   set avg_burst [expr {$cnfg(stripe_frag_size) / 512 * 8}] 
+   set avg_burst [expr {$cnfg(pmtu) / 512 * 8}] 
    # Check cr_hbm.tcl for explanation
 
    if {$cnfg(fdev) eq "v80"} {
@@ -197,6 +196,7 @@ proc cr_bd_design_ddr { parentCell } {
             CONFIG.MC_NO_CHANNELS {Single} \
             CONFIG.MC_RANK {1} \
             CONFIG.MC_ROWADDRESSWIDTH {16} \
+            CONFIG.MC_PRE_DEF_ADDR_MAP_SEL {ROW_COLUMN_BANK} \
             CONFIG.MC_STACKHEIGHT {1} \
             CONFIG.MC_SYSTEM_CLOCK {Differential} \
             CONFIG.NUM_CLKS {1} \

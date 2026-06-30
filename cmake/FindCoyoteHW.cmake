@@ -466,11 +466,15 @@ macro(validation_checks_hw)
             set(AV_HBM 0)
         endif()
 
-        ## For V80, MEM_OFFSET differs depending on the memory type, so special configuration is needed here
+        ## For V80, striping setting differs depending on the memory type, so special configuration is needed here
         if(FDEV_NAME STREQUAL "v80")
             if(AV_DDR AND NOT AV_HBM)
+                set(MC_SIZE ${DDR_SIZE})
+                set(N_STRIPE_CHAN ${N_DDR_CHAN})
                 set(MEM_OFFSET 5497558138880) # 0x500_0000_0000
             elseif(AV_HBM AND NOT AV_DDR)
+                set(MC_SIZE 30)
+                set(N_STRIPE_CHAN 32)
                 set(MEM_OFFSET 274877906944) # 0x40_0000_0000
             elseif(AV_DDR AND AV_HBM)
                 message(FATAL_ERROR "Invalid memory configuration for the V80 device.")

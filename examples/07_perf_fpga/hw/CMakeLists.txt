@@ -35,9 +35,16 @@ message("*** Coyote Example 7: Data Movement Initiated by the FPGA [Hardware] **
 
 # Enables host stream
 set(EN_STRM 1)
+set(EN_MEM 1)
 
 # Number of vFPGAs (user applications)
 set(N_REGIONS 1)
+
+# Build Options
+set(BUILD_OPT 1)
+set(BUILD_STATIC 1)
+set(BUILD_SHELL 0)
+set(EN_SHELL_PBLOCK 0)
 
 # Confirm that the selected options are allowed
 validation_checks_hw()

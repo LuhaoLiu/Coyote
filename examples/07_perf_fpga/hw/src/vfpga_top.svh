@@ -26,10 +26,16 @@
 
 // Simple pipeline stages, buffering the input/output signals (not really needed, but nice to have for easier timing closure)
 AXI4SR axis_in_int (.*);
-axisr_reg inst_reg_in  (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_host_recv[0]), .m_axis(axis_in_int));
+// For HOST stream
+// axisr_reg inst_reg_in  (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_host_recv[0]), .m_axis(axis_in_int));
+// For CARD stream
+axisr_reg inst_reg_in  (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_card_recv[0]), .m_axis(axis_in_int));
 
 AXI4SR axis_out_int (.*);
-axisr_reg inst_reg_out (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_out_int), .m_axis(axis_host_send[0]));
+// For HOST stream
+// axisr_reg inst_reg_out (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_out_int), .m_axis(axis_host_send[0]));
+// For CARD stream
+axisr_reg inst_reg_out (.aclk(aclk), .aresetn(aresetn), .s_axis(axis_out_int), .m_axis(axis_card_send[0]));
 
 ///////////////////////////////////////
 //          BENCH CONTROL           //
@@ -185,7 +191,7 @@ always_comb begin
     sq_rd.data.pid = bench_pid;
     sq_rd.data.len = bench_len;
     sq_rd.data.vaddr = bench_vaddr;
-    sq_rd.data.strm = STRM_HOST;
+    sq_rd.data.strm = STRM_CARD;
     sq_rd.data.opcode = LOCAL_READ;
     sq_rd.valid = (state_C == ST_READ) && ~done_req;
 
@@ -203,7 +209,7 @@ always_comb begin
     sq_wr.data.pid = bench_pid;
     sq_wr.data.len = bench_len;
     sq_wr.data.vaddr = bench_vaddr;
-    sq_wr.data.strm = STRM_HOST;
+    sq_wr.data.strm = STRM_CARD;
     sq_wr.data.opcode = LOCAL_WRITE;
     sq_wr.valid = (state_C == ST_WRITE) && ~done_req;
 

@@ -723,6 +723,17 @@ proc cr_bd_design_plnvme { parentCell } {
   ] $axis_ila_5
 
 
+  # Create instance: axis_ila_6
+  # Monitor inbound SSD transactions at the QDMA master bridge before
+  # SmartConnect performs address decoding and routes them to SQ/CQ/PRP/HBM.
+  set axis_ila_6 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_ila:1.3 axis_ila_6 ]
+  set_property -dict [list \
+    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_MON_TYPE {Interface_Monitor} \
+    CONFIG.C_SLOT_0_INTF_TYPE {xilinx.com:interface:aximm_rtl:1.0} \
+  ] $axis_ila_6
+
+
   # Create instance: axis_vio_1, and set properties
   set axis_vio_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_vio:1.0 axis_vio_1 ]
   set_property -dict [list \
@@ -839,6 +850,9 @@ proc cr_bd_design_plnvme { parentCell } {
   connect_bd_intf_net -intf_net pl_pcie_nvme_top_wra_0_m_axil_csr [get_bd_intf_pins pl_pcie_nvme_top_wra_0/m_axil_csr] [get_bd_intf_pins smartconnect_1/S00_AXI]
   connect_bd_intf_net -intf_net pl_pcie_nvme_top_wra_0_m_axil_ecam [get_bd_intf_pins pl_pcie_nvme_top_wra_0/m_axil_ecam] [get_bd_intf_pins smartconnect_2/S00_AXI]
   connect_bd_intf_net -intf_net qdma_0_M_AXI_BRIDGE [get_bd_intf_pins qdma_0/M_AXI_BRIDGE] [get_bd_intf_pins smartconnect_3/S00_AXI]
+  if {$en_plnvme_debug} {
+    connect_bd_intf_net -intf_net [get_bd_intf_nets qdma_0_M_AXI_BRIDGE] [get_bd_intf_pins qdma_0/M_AXI_BRIDGE] [get_bd_intf_pins axis_ila_6/SLOT_0_AXI]
+  }
   connect_bd_intf_net -intf_net qdma_0_pcie_cfg_control_if [get_bd_intf_pins qdma_0/pcie_cfg_control_if] [get_bd_intf_pins qdma_0_support/pcie_cfg_control]
   connect_bd_intf_net -intf_net qdma_0_pcie_cfg_interrupt [get_bd_intf_pins qdma_0/pcie_cfg_interrupt] [get_bd_intf_pins qdma_0_support/pcie_cfg_interrupt]
   connect_bd_intf_net -intf_net qdma_0_pcie_cfg_mgmt_if [get_bd_intf_pins qdma_0/pcie_cfg_mgmt_if] [get_bd_intf_pins qdma_0_support/pcie_cfg_mgmt]
@@ -1080,6 +1094,8 @@ proc cr_bd_design_plnvme { parentCell } {
     connect_bd_net -net [get_bd_nets proc_sys_reset_0_peripheral_aresetn] [get_bd_pins axis_ila_4/resetn]
     connect_bd_net -net [get_bd_nets qdma_0_axi_aclk] [get_bd_pins axis_ila_5/clk]
     connect_bd_net -net [get_bd_nets qdma_0_axi_aresetn] [get_bd_pins axis_ila_5/resetn]
+    connect_bd_net -net [get_bd_nets qdma_0_axi_aclk] [get_bd_pins axis_ila_6/clk]
+    connect_bd_net -net [get_bd_nets qdma_0_axi_aresetn] [get_bd_pins axis_ila_6/resetn]
     connect_bd_net -net [get_bd_nets qdma_0_csr_prog_done] [get_bd_pins axis_ila_0/probe2]
     connect_bd_net -net [get_bd_nets qdma_0_support_phy_rdy_out] [get_bd_pins axis_ila_0/probe0]
     connect_bd_net -net [get_bd_nets qdma_0_support_user_clk] [get_bd_pins axis_ila_0/clk]

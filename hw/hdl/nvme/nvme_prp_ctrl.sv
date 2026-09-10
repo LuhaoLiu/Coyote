@@ -220,7 +220,7 @@ module nvme_prp_ctrl #(
     );
 
     // ILA Debug
-// `define EN_ILA_NVME_PRP_CTRL
+`define EN_ILA_NVME_PRP_CTRL
 `ifdef EN_ILA_NVME_PRP_CTRL
     ila_nvme_prp_ctrl inst_ila_nvme_prp_ctrl (
         .clk    (aclk),

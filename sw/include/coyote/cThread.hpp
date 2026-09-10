@@ -431,8 +431,8 @@ protected:
 	 * range is then accessible from this cThread's region via NVMe SQEs issued by the
 	 * vFPGA user logic.
 	 *
-	 * @param bdf  PCI BDF string of the NVMe device to claim (e.g. "0000:01:00.0")
-	 * @param nsid Namespace identifier to use
+	 * @param bdf  PCI BDF string for HOST-connected NVMe; ignored for PL-connected NVMe
+	 * @param nsid Namespace identifier for HOST-connected NVMe; PL currently requires 1
 	 * @param size Requested allocation size in bytes
 	 * @return Populated nvmeInitIoctl with result, dev_id, lba_size, lba_offset, lba_count, doorbell addresses and mdts
 	 * @throws std::runtime_error if the kernel ioctl fails

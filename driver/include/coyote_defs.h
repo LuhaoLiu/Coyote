@@ -283,6 +283,8 @@ extern bool en_hmm;
 #define EN_TCP_SHIFT 0x0
 #define EN_NVME_MASK 0x1
 #define EN_NVME_SHIFT 0x0
+#define NVME_TYPE_MASK 0x2
+#define NVME_TYPE_SHIFT 0x1
 #define QSFP_MASK 0x2
 #define QSFP_SHIFT 0x1
 
@@ -350,6 +352,17 @@ extern bool en_hmm;
 #define FPGA_NVME_CNFG_OFFS 0x00004000
 #define FPGA_NVME_CNFG_SIZE 0x1000
 #define MAX_NVME_DEVICES 16
+
+/**
+ * @brief Physical connection used by the NVMe controller.
+ *
+ * Bit 0 of shell_cnfg->nvme_cnfg remains the enable bit. Bit 1 selects this
+ * topology, with zero retaining the existing host-connected behavior.
+ */
+enum coyote_nvme_type {
+    COYOTE_NVME_TYPE_HOST = 0,
+    COYOTE_NVME_TYPE_PL   = 1,
+};
 
 // Card memory constants
 // On UltraScale+ devices, support up to 1024 * 1024 chunks of 4 KB
@@ -1262,7 +1275,9 @@ struct nvme_manager {
 /**
  * @brief NVMe initialization IOCTL request/response; passed to IOCTL_NVME_INIT
  *
- * Input fields: bdf, nsid, size (requested byte range in the namespace)
+ * Input fields: bdf, nsid, size (requested byte range in the namespace).
+ * For PL-connected NVMe, bdf is ignored and the current single-device
+ * contract fixes nsid to 1.
  * Output fields: result, dev_id, lba_size, nsze, lba_offset, lba_count, doorbell addresses, mdts
  */
 struct nvme_init_ioctl {
@@ -1362,6 +1377,9 @@ struct bus_driver_data {
     
     /// True if the NVMe stack is enabled in the loaded bitstream; read from shell_cnfg->nvme_cnfg
     int en_nvme;
+
+    /// NVMe connection topology; bit 1 of shell_cnfg->nvme_cnfg (HOST=0, PL=1)
+    enum coyote_nvme_type nvme_type;
 
     /// Pointer to the FPGA NVMe config registers (single instance at SHELL_BAR + FPGA_NVME_CNFG_OFFS); NULL if EN_NVME is disabled
     volatile struct nvme_fpga_cnfg_regs *nvme_cnfg_regs;

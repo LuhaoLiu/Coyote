@@ -43,7 +43,7 @@ module shell_ctrl_cc (
 {% if cnfg.en_avx %}
     AXI4.m              axim_ctrl [N_REGIONS],
 {% endif %}
-{% if cnfg.en_nvme %}
+{% if cnfg.en_nvme_host %}
     // axi_nvme_cnfg sliced from axi_cnfg by nvme_cnfg_axil_split
     AXI4.m              axi_nvme_prp,
     AXI4.m              axi_nvme_sq,
@@ -195,7 +195,7 @@ design_ctrl inst_design_ctrl (
     .axim_ctrl_{{ i }}_wvalid(axim_ctrl[{{ i }}].wvalid),
     {% endfor %}
 {% endif %}
-{% if cnfg.en_nvme %}
+{% if cnfg.en_nvme_host %}
     .axi_nvme_prp_araddr(axi_nvme_prp.araddr),
     .axi_nvme_prp_arburst(axi_nvme_prp.arburst),
     .axi_nvme_prp_arcache(axi_nvme_prp.arcache),

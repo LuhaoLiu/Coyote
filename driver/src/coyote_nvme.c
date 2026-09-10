@@ -79,6 +79,38 @@
 /* Controller enable / disable poll timeout, in milliseconds */
 #define NVME_CTRL_TIMEOUT_MS    5000
 
+/*
+ * design_plnvme owns PCIe enumeration, controller initialization, and I/O
+ * queue creation, so Linux cannot discover these values through the PCI/NVMe
+ * APIs. The namespace values below were captured from design_plnvme's Identify
+ * data. The BAR address, queue ID, and doorbell stride are part of the current
+ * single-controller BD contract.
+ *
+ * This remains deliberately PL-only: host-connected NVMe continues to discover
+ * all of these values from the device at run time.
+ */
+struct pl_nvme_static_params {
+    uint32_t dev_id;
+    uint32_t nsid;
+    uint32_t lba_size;
+    uint64_t nsze;
+    uint32_t mdts;
+    uint64_t controller_bar_base;
+    uint32_t doorbell_stride;
+    uint16_t io_qid;
+};
+
+static const struct pl_nvme_static_params pl_nvme_params = {
+    .dev_id              = 0,
+    .nsid                = 1,
+    .lba_size            = 0x200U,         /* Identify Namespace: LBADS=9 */
+    .nsze                = 0x1bf1f72b0ULL, /* Identify Namespace: NSZE */
+    .mdts                = 0x400000U,      /* MDTS=10, MPSMIN=4 KiB */
+    .controller_bar_base = 0x80000000ULL,
+    .doorbell_stride     = 4,
+    .io_qid              = 1,              /* queue 1, CAP.DSTRD=0 */
+};
+
 /* ============================================================
  * Forward declarations (static helpers)
  * ============================================================ */
@@ -610,6 +642,18 @@ void nvme_mgr_free(struct bus_driver_data *bd_data) {
         return;
     }
 
+    if (bd_data->nvme_type == COYOTE_NVME_TYPE_PL) {
+        /*
+         * design_plnvme owns the controller and queue lifecycle. There are no host
+         * PCI, BAR, IOVA, or coherent-admin-queue resources to release here.
+         * TODO: Add a design_plnvme reset/shutdown handshake if the BD requires one.
+         */
+        kfree(mgr);
+        bd_data->nvme_mgr = NULL;
+        dbg_info("PL-connected NVMe manager freed\n");
+        return;
+    }
+
     for (i = 0; i < mgr->num_devices; i++) {
         struct nvme_device_state *ds = &mgr->devices[i];
         if (!ds->active) {
@@ -643,6 +687,186 @@ void nvme_mgr_free(struct bus_driver_data *bd_data) {
 }
 
 /* ============================================================
+ * PL-connected IOCTLs
+ * ============================================================ */
+static long vfpga_nvme_init_pl(struct vfpga_dev *device,
+                               struct nvme_init_ioctl *req) {
+    struct bus_driver_data *bd = device->bd_data;
+    struct nvme_manager *mgr = bd->nvme_mgr;
+    volatile struct nvme_fpga_cnfg_regs *cnfg = bd->nvme_cnfg_regs;
+    struct nvme_device_state *ds;
+    uint64_t lba_count, lba_offset;
+    int region_id = device->id;
+
+    /* The PL setup engine creates namespace 1 only. BDF is intentionally ignored. */
+    if (req->nsid != pl_nvme_params.nsid) {
+        pr_err("vfpga_nvme_init_pl: namespace %u is not configured (expected %u)\n",
+               req->nsid, pl_nvme_params.nsid);
+        req->result = -EINVAL;
+        return -EINVAL;
+    }
+    if (!mgr || !cnfg) {
+        req->result = -ENODEV;
+        return -ENODEV;
+    }
+    if (region_id < 0 || region_id >= MAX_N_REGIONS) {
+        req->result = -EINVAL;
+        return -EINVAL;
+    }
+
+    mutex_lock(&mgr->lock);
+
+    if (mgr->num_devices == 0) {
+        ds = nvme_alloc_device(mgr);
+        if (!ds) {
+            mutex_unlock(&mgr->lock);
+            req->result = -ENOSPC;
+            return -ENOSPC;
+        }
+
+        memset(ds, 0, sizeof(*ds));
+        ds->dev_id          = pl_nvme_params.dev_id;
+        ds->nsid            = pl_nvme_params.nsid;
+        ds->io_qid          = pl_nvme_params.io_qid;
+        ds->next_free_lba   = 0;
+        ds->ctx.nsid        = pl_nvme_params.nsid;
+        ds->ctx.lba_size    = pl_nvme_params.lba_size;
+        ds->ctx.nsze        = pl_nvme_params.nsze;
+        ds->ctx.mdts        = pl_nvme_params.mdts;
+        ds->ctx.db_iova     = pl_nvme_params.controller_bar_base;
+        ds->ctx.db_stride   = pl_nvme_params.doorbell_stride;
+        ds->ctx.initialized = true;
+        mutex_init(&ds->ctx.lock);
+
+        /*
+         * EN_NVME_PL supplies its SSD-visible card and PRP addresses directly,
+         * so FPGA_BAR_BASE is unused for PL requests. Device information and
+         * queue reset still use the common nvme_top configuration table.
+         */
+        nvme_write_device_info(cnfg, ds, 0);
+
+        ds->active = true;
+        mgr->num_devices = 1;
+
+        /*
+         * setup_done is not exposed in the shell MMIO register map. nvme_top
+         * therefore remains the readiness authority and gates both request
+         * admission and doorbell writes until design_plnvme asserts it.
+         * TODO: Expose setup_error/status if software needs synchronous setup
+         * diagnostics rather than hardware back-pressure.
+         */
+        dbg_info("registered PL NVMe dev_id=%u nsid=%u lba_size=%u nsze=%llu mdts=%u\n",
+                 ds->dev_id, ds->ctx.nsid, ds->ctx.lba_size,
+                 ds->ctx.nsze, ds->ctx.mdts);
+    } else {
+        ds = &mgr->devices[pl_nvme_params.dev_id];
+        if (!ds->active) {
+            mutex_unlock(&mgr->lock);
+            req->result = -ENODEV;
+            return -ENODEV;
+        }
+    }
+
+    lba_count = req->size / ds->ctx.lba_size;
+    if (lba_count == 0) {
+        lba_count = ds->ctx.nsze;
+    }
+
+    lba_offset = ds->next_free_lba;
+    if (lba_offset + lba_count > ds->ctx.nsze) {
+        pr_err("vfpga_nvme_init_pl: not enough LBAs (need %llu, have %llu)\n",
+               lba_count, ds->ctx.nsze - lba_offset);
+        mutex_unlock(&mgr->lock);
+        req->result = -ENOSPC;
+        return -ENOSPC;
+    }
+    ds->next_free_lba += lba_count;
+
+    nvme_write_permission(cnfg, region_id, ds->dev_id, lba_offset, lba_count,
+                          ds->ctx.lba_size);
+
+    mgr->region_allocs[region_id][ds->dev_id].dev_id     = ds->dev_id;
+    mgr->region_allocs[region_id][ds->dev_id].lba_offset = lba_offset;
+    mgr->region_allocs[region_id][ds->dev_id].lba_count  = lba_count;
+    mgr->region_allocs[region_id][ds->dev_id].active     = true;
+
+    req->result            = 0;
+    req->dev_id            = ds->dev_id;
+    req->lba_size          = ds->ctx.lba_size;
+    req->nsze              = ds->ctx.nsze;
+    req->lba_offset        = lba_offset;
+    req->lba_count         = lba_count;
+    req->sq_doorbell_addr  = ds->ctx.db_iova + NVME_REG_DOORBELL
+                             + (2 * ds->io_qid * ds->ctx.db_stride);
+    req->cq_doorbell_addr  = req->sq_doorbell_addr + ds->ctx.db_stride;
+    req->mdts              = ds->ctx.mdts;
+
+    mutex_unlock(&mgr->lock);
+    return 0;
+}
+
+static long vfpga_nvme_close_pl(struct vfpga_dev *device, uint32_t dev_id) {
+    struct nvme_manager *mgr = device->bd_data->nvme_mgr;
+    int region_id = device->id;
+    int i;
+
+    if (!mgr) {
+        return -ENODEV;
+    }
+    if (region_id < 0 || region_id >= MAX_N_REGIONS) {
+        return -EINVAL;
+    }
+
+    mutex_lock(&mgr->lock);
+    if (dev_id < MAX_NVME_DEVICES) {
+        mgr->region_allocs[region_id][dev_id].active = false;
+    } else {
+        for (i = 0; i < MAX_NVME_DEVICES; i++) {
+            mgr->region_allocs[region_id][i].active = false;
+        }
+    }
+    mutex_unlock(&mgr->lock);
+
+    dbg_info("cleared PL NVMe allocations for region %d, dev_id=%u\n",
+             region_id, dev_id);
+    return 0;
+}
+
+static long vfpga_nvme_is_registered_pl(struct vfpga_dev *device,
+                                        struct nvme_init_ioctl *req) {
+    struct nvme_manager *mgr = device->bd_data->nvme_mgr;
+    struct nvme_device_state *ds;
+
+    if (req->nsid != pl_nvme_params.nsid) {
+        req->result = -ENOENT;
+        return -ENOENT;
+    }
+    if (!mgr) {
+        req->result = -ENODEV;
+        return -ENODEV;
+    }
+
+    mutex_lock(&mgr->lock);
+    ds = &mgr->devices[pl_nvme_params.dev_id];
+    if (mgr->num_devices == 0 || !ds->active) {
+        mutex_unlock(&mgr->lock);
+        req->result = -ENOENT;
+        return -ENOENT;
+    }
+
+    req->result           = 0;
+    req->dev_id           = ds->dev_id;
+    req->lba_size         = ds->ctx.lba_size;
+    req->nsze             = ds->ctx.nsze;
+    req->sq_doorbell_addr = ds->ctx.db_iova + NVME_REG_DOORBELL
+                            + (2 * ds->io_qid * ds->ctx.db_stride);
+    req->cq_doorbell_addr = req->sq_doorbell_addr + ds->ctx.db_stride;
+    req->mdts             = ds->ctx.mdts;
+    mutex_unlock(&mgr->lock);
+    return 0;
+}
+
+/* ============================================================
  * IOCTL: claim NVMe device and allocate LBA range for this region
  * ============================================================ */
 long vfpga_nvme_init(struct vfpga_dev *device, struct nvme_init_ioctl *req) {
@@ -659,6 +883,10 @@ long vfpga_nvme_init(struct vfpga_dev *device, struct nvme_init_ioctl *req) {
     }
 
     bd  = device->bd_data;
+    if (bd->nvme_type == COYOTE_NVME_TYPE_PL) {
+        return vfpga_nvme_init_pl(device, req);
+    }
+
     mgr = bd->nvme_mgr;
     cnfg = bd->nvme_cnfg_regs;
     region_id = device->id;
@@ -833,6 +1061,10 @@ long vfpga_nvme_close(struct vfpga_dev *device, uint32_t dev_id) {
     }
 
     bd  = device->bd_data;
+    if (bd->nvme_type == COYOTE_NVME_TYPE_PL) {
+        return vfpga_nvme_close_pl(device, dev_id);
+    }
+
     mgr = bd->nvme_mgr;
     region_id = device->id;
 
@@ -872,6 +1104,10 @@ long vfpga_nvme_is_registered(struct vfpga_dev *device, struct nvme_init_ioctl *
     }
 
     bd  = device->bd_data;
+    if (bd->nvme_type == COYOTE_NVME_TYPE_PL) {
+        return vfpga_nvme_is_registered_pl(device, req);
+    }
+
     mgr = bd->nvme_mgr;
 
     if (!mgr) {

@@ -293,7 +293,7 @@ module nvme_sq_ctrl #(
     end
 
     // ILA Debug
-// `define EN_ILA_NVME_SQ_CTRL
+`define EN_ILA_NVME_SQ_CTRL
 `ifdef EN_ILA_NVME_SQ_CTRL
     ila_nvme_sq_ctrl inst_ila_nvme_sq_ctrl (
         .clk    (aclk),

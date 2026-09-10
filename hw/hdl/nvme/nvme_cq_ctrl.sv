@@ -357,7 +357,7 @@ module nvme_cq_ctrl #(
     end
 
     // ILA Debug
-// `define EN_ILA_NVME_CQ_CTRL
+`define EN_ILA_NVME_CQ_CTRL
 `ifdef EN_ILA_NVME_CQ_CTRL
     // Wire for probing current device's cq_head
     logic [CQ_ADDR_BITS-1:0] dbg_cq_head_cur;

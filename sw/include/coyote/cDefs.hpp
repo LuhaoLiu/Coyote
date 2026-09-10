@@ -306,8 +306,8 @@ constexpr int const MAX_NVME_DEVICES = 16;
 // driver populates the output fields when result == 0.
 struct nvmeInitIoctl {
     // Input
-    char     bdf[16];                       /**< PCI BDF string of the NVMe device to claim */
-    uint32_t nsid;                          /**< Namespace to use */
+    char     bdf[16];                       /**< PCI BDF for HOST; ignored for PL-connected NVMe */
+    uint32_t nsid;                          /**< Namespace for HOST; PL currently requires namespace 1 */
     uint64_t size;                          /**< Requested allocation size, bytes */
 
     // Output
@@ -423,6 +423,12 @@ typedef struct __attribute__((packed)) {
     uint32_t pg_l_bits    : 6;  // [31:26]
 } ctrl_cnfg_reg_bits;
 
+/// @brief Physical connection used by an enabled NVMe controller
+enum class NvmeType : uint8_t {
+    HOST_CONNECTED = 0,
+    PL_CONNECTED = 1,
+};
+
 
 /**
  * @brief Shell configuration, as set in CMake for hardware synthesis
@@ -453,6 +459,9 @@ typedef struct __attribute__((packed)) {
     /// NVMe enabled
     bool en_nvme = { false };
 
+    /// NVMe connection topology; meaningful when en_nvme is true
+    NvmeType nvme_type = { NvmeType::HOST_CONNECTED };
+
     /// Set to true if either RDMA or TCP is enabled
     bool en_net = { false };
     
@@ -474,6 +483,7 @@ typedef struct __attribute__((packed)) {
         en_rdma = (cnfg >> 16) & 0x1;
         en_tcp = (cnfg >> 17) & 0x1;
         en_nvme = (cnfg >> 18) & 0x1;
+        nvme_type = ((cnfg >> 19) & 0x1) ? NvmeType::PL_CONNECTED : NvmeType::HOST_CONNECTED;
         n_hdma_chan = (cnfg >> 32) & 0xff;
         n_fpga_reg = (cnfg >> 48) & 0xff;
         en_net = en_rdma || en_tcp;

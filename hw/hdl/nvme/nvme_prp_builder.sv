@@ -53,6 +53,31 @@ module nvme_prp_builder #(
     input  logic [63:0] FPGA_PRP_BAR_BASE
 );
 
+`ifdef EN_NVME_PL
+    // PG344 programs a 16-TiB inbound Root-Port aperture at this PCIe base and
+    // removes the base again before axi_nvme_card. Consequently, adding this value
+    // to a zero-based card address preserves the card address one-to-one at the
+    // BD's axi_nvme_card port.
+    localparam logic [63:0] PL_RP_DMA_PCIE_BASE =
+        64'h0000_1000_0000_0000;
+
+    // SSD-visible address of the PRP-list window. PG344 translates it to the
+    // BD-local axi_nvme_prp segment at 0x0FFF_F480_0000.
+    localparam logic [63:0] PL_PRP_PCIE_BASE =
+        64'h0000_1FFF_F480_0000;
+
+    // IMPORTANT: the temporary raw-address handling in the is_host branches
+    // below can alias the zero-based card aperture. PL software must keep
+    // host-backed NVMe requests disabled until the host translation TODO is
+    // implemented (or such requests are explicitly rejected in hardware).
+
+    function automatic logic [63:0] pl_extend_paddr(
+        input logic [PADDR_BITS-1:0] paddr
+    );
+        pl_extend_paddr = {{(64-PADDR_BITS){1'b0}}, paddr};
+    endfunction
+`endif
+
     // State machine
     typedef enum logic [3:0] {
         ST_IDLE              = 4'd0,
@@ -149,10 +174,22 @@ module nvme_prp_builder #(
             ST_CHECK_SIZE: begin
                 // Set PRP1
                 prp_rsp_N = prp_rsp_C;
+`ifdef EN_NVME_PL
+                if (mmu_rsp_C.is_host == 1'b0) begin
+                    prp_rsp_N.prp1 = pl_extend_paddr(mmu_rsp_C.paddr) +
+                                     PL_RP_DMA_PCIE_BASE;
+                end else begin
+                    // TODO (PL-connected NVMe): translate host-memory physical
+                    // addresses into the reserved axi_nvme_host aperture. The BD
+                    // host master remains terminated until that path exists.
+                    prp_rsp_N.prp1 = pl_extend_paddr(mmu_rsp_C.paddr);
+                end
+`else
                 if (mmu_rsp_C.is_host == 1'b0)
                     prp_rsp_N.prp1 = mmu_rsp_C.paddr + FPGA_BAR_BASE;
                 else
                     prp_rsp_N.prp1 = mmu_rsp_C.paddr;
+`endif
 
                 if (prp_req_C.len <= 4096) begin
                     // 4KB: Only PRP1 needed
@@ -195,25 +232,60 @@ module nvme_prp_builder #(
                     else if (prp_req_C.len <= 8192) begin
                         // 8KB: PRP2 is direct address
                         prp_rsp_N = prp_rsp_C;
+`ifdef EN_NVME_PL
+                        if (s_nvme_mmu_rsp.data.is_host == 1'b0) begin
+                            prp_rsp_N.prp2 =
+                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr) +
+                                PL_RP_DMA_PCIE_BASE;
+                        end else begin
+                            // TODO (PL-connected NVMe): apply the future host
+                            // aperture translation before enabling axi_nvme_host.
+                            prp_rsp_N.prp2 =
+                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr);
+                        end
+`else
                         if (s_nvme_mmu_rsp.data.is_host == 1'b0)
                             prp_rsp_N.prp2 = s_nvme_mmu_rsp.data.paddr + FPGA_BAR_BASE;
                         else
                             prp_rsp_N.prp2 = s_nvme_mmu_rsp.data.paddr;
+`endif
                         state_N = ST_SEND_PRP_8KB;
                     end
                     else begin
                         // >8KB: PRP2 points to PRP list
                         prp_rsp_N = prp_rsp_C;
+`ifdef EN_NVME_PL
+                        prp_rsp_N.prp2 = PL_PRP_PCIE_BASE
+                                       + ({{(64-N_NVME_BITS){1'b0}},
+                                            prp_req_C.dev_id}
+                                          << (NVME_QUEUE_BITS + 12))
+                                       + ({{(64-NVME_QUEUE_BITS){1'b0}},
+                                            prp_req_C.sq_tail} << 12);
+`else
                         prp_rsp_N.prp2 = FPGA_PRP_BAR_BASE
                                        + (prp_req_C.dev_id  << (NVME_QUEUE_BITS + 12))
                                        + (prp_req_C.sq_tail << 12);
+`endif
 
                         // Prepare first write entry
                         prp_write_N.addr = {prp_req_C.dev_id, prp_req_C.sq_tail, {PRP_ADDR_BITS{1'b0}}};
+`ifdef EN_NVME_PL
+                        if (s_nvme_mmu_rsp.data.is_host == 1'b0) begin
+                            prp_write_N.data =
+                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr) +
+                                PL_RP_DMA_PCIE_BASE;
+                        end else begin
+                            // TODO (PL-connected NVMe): apply the future host
+                            // aperture translation before enabling axi_nvme_host.
+                            prp_write_N.data =
+                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr);
+                        end
+`else
                         if (s_nvme_mmu_rsp.data.is_host == 1'b0)
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr + FPGA_BAR_BASE;
                         else
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr;
+`endif
 
                         state_N = ST_SEND_PRP_MULT;
                     end
@@ -264,10 +336,23 @@ module nvme_prp_builder #(
                     else begin
                         // Prepare write data
                         prp_write_N = prp_write_C;
+`ifdef EN_NVME_PL
+                        if (s_nvme_mmu_rsp.data.is_host == 1'b0) begin
+                            prp_write_N.data =
+                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr) +
+                                PL_RP_DMA_PCIE_BASE;
+                        end else begin
+                            // TODO (PL-connected NVMe): apply the future host
+                            // aperture translation before enabling axi_nvme_host.
+                            prp_write_N.data =
+                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr);
+                        end
+`else
                         if (s_nvme_mmu_rsp.data.is_host == 1'b0)
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr + FPGA_BAR_BASE;
                         else
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr;
+`endif
 
                         state_N = ST_SEND_WRITE_LOOP;
                     end
@@ -322,7 +407,7 @@ module nvme_prp_builder #(
     end
 
     // ILA Debug
-// `define EN_ILA_NVME_MANAGE_PRP
+`define EN_ILA_NVME_MANAGE_PRP
 `ifdef EN_ILA_NVME_MANAGE_PRP
     ila_nvme_manage_prp inst_ila_nvme_manage_prp (
         .clk    (aclk),

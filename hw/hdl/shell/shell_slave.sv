@@ -294,6 +294,8 @@ always_ff @(posedge aclk) begin
         end
         NVME_CNFG_REG: begin // NVMe config
           axi_rdata[0] <= NVME_FLOW;
+          // Connection type is meaningful only when NVMe is enabled (bit 0).
+          axi_rdata[1] <= NVME_PL_FLOW;
         end
 
 `ifdef EN_RDMA

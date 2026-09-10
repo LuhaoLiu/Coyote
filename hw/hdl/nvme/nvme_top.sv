@@ -50,9 +50,15 @@ module nvme_top (
     metaIntf.m          m_nvme_rd_sq,     // req_t
     metaIntf.s          s_nvme_rd_rsp,    // nvme_mmu_rsp_t
 
-    // Doorbell DMA write (merged upstream via arbiter)
+`ifdef EN_NVME_HOST
+    // Host-connected NVMe: doorbell DMA write (merged upstream via arbiter)
     dmaIntf.m           m_db_wr_req,
     AXI4S.m             m_db_wr_data,
+`elsif EN_NVME_PL
+    // PL-connected NVMe: doorbell AXI-MM path to design_plnvme
+    AXI4.m              m_axi_nvme_mmio,
+    input  logic        nvme_setup_done,
+`endif
 
     // Single AXI interfaces (from BD interconnect)
     AXI4L.s             s_nvme_cnfg,
@@ -64,6 +70,20 @@ module nvme_top (
     // Constants
     localparam logic [63:0] PRP_OFFSET = 64'h0480_0000;
     localparam int unsigned N_NVME     = (1 << N_NVME_BITS);
+`ifdef EN_NVME_PL
+    // design_plnvme creates I/O queue 1 and currently assumes CAP.DSTRD=0, hence
+    // four-byte doorbell spacing: SQ1=BAR+0x1008 and CQ1=BAR+0x100c.
+    // Supporting another queue ID or DSTRD requires making these configurable.
+    localparam logic [63:0] PL_NVME_SQ_DB_ADDR = 64'h0000_0000_8000_1008;
+    localparam logic [63:0] PL_NVME_CQ_DB_ADDR = 64'h0000_0000_8000_100c;
+
+`ifndef SYNTHESIS
+    initial begin
+        assert (PL_NVME_CQ_DB_ADDR == PL_NVME_SQ_DB_ADDR + 64'd4)
+            else $error("PL NVMe CQ1 doorbell must immediately follow SQ1 for DSTRD=0");
+    end
+`endif
+`endif
 
     // Config signals
     logic [63:0] fpga_bar_base;
@@ -105,6 +125,27 @@ module nvme_top (
     AXI4S   sq_dma_data (.aclk(aclk));
     AXI4S   cq_dma_data (.aclk(aclk));
 
+`ifdef EN_NVME_PL
+    metaIntf #(.STYPE(sq_db_req_t)) pl_sq_db_strm ();
+    logic [63:0] pl_sq_db_addr_tbl [N_NVME];
+    dmaIntf pl_db_dma_req ();
+    AXI4S   pl_db_dma_data (.aclk(aclk));
+
+    // The PL setup engine creates one SSD and queue pair only. Override the
+    // host-driver-supplied address for device zero; invalid devices retain zero.
+    always_comb begin
+        pl_sq_db_strm.valid = sq_db_strm.valid;
+        pl_sq_db_strm.data  = sq_db_strm.data;
+        pl_sq_db_strm.data.sq_db_addr = PL_NVME_SQ_DB_ADDR;
+        sq_db_strm.ready = pl_sq_db_strm.ready;
+
+        for (int d = 0; d < N_NVME; d++)
+            // The tracker adds four, so seed it from the desired CQ address.
+            pl_sq_db_addr_tbl[d] =
+                (d == 0) ? (PL_NVME_CQ_DB_ADDR - 64'd4) : 64'd0;
+    end
+`endif
+
     // Per-device doorbell address table
     logic [63:0] sq_db_addr_tbl [N_NVME];
 
@@ -126,7 +167,12 @@ module nvme_top (
     logic [N_REGIONS_BITS-1:0] arb_id;
 
     for (genvar i = 0; i < N_REGIONS; i++) begin : gen_user_req_cred
-        wire cred_ok = credit_cnt[i][s_nvme_user_req[i].data.dev_id] < NVME_N_OUTSTANDING;
+        wire cred_ok =
+            credit_cnt[i][s_nvme_user_req[i].data.dev_id] < NVME_N_OUTSTANDING
+`ifdef EN_NVME_PL
+            && nvme_setup_done
+`endif
+            ;
         assign user_req_cred[i].valid  = s_nvme_user_req[i].valid && cred_ok;
         assign user_req_cred[i].data   = s_nvme_user_req[i].data;
         assign s_nvme_user_req[i].ready = user_req_cred[i].ready && cred_ok;
@@ -152,10 +198,18 @@ module nvme_top (
 `else
     // Single region: direct, no arbitration
     always_comb begin
+`ifdef EN_NVME_PL
+        user_req_arb.valid       = s_nvme_user_req[0].valid && nvme_setup_done;
+`else
         user_req_arb.valid       = s_nvme_user_req[0].valid;
+`endif
         user_req_arb.data        = s_nvme_user_req[0].data;
         user_req_arb.data.vfid   = '0;
+`ifdef EN_NVME_PL
+        s_nvme_user_req[0].ready = user_req_arb.ready && nvme_setup_done;
+`else
         s_nvme_user_req[0].ready = user_req_arb.ready;
+`endif
     end
 `endif
 
@@ -326,7 +380,11 @@ module nvme_top (
     nvme_sq_doorbell_writer inst_sq_doorbell_writer (
         .aclk         (aclk),
         .aresetn      (aresetn),
+`ifdef EN_NVME_PL
+        .s_sq_db_req  (pl_sq_db_strm),
+`else
         .s_sq_db_req  (sq_db_strm),
+`endif
         .m_dma_wr_req (sq_dma_req),
         .m_dma_wr_data(sq_dma_data)
     );
@@ -345,10 +403,17 @@ module nvme_top (
         .m_cq_head_update(cq_head_upd),
         .m_cq_dma_req    (cq_dma_req),
         .m_cq_dma_data   (cq_dma_data),
+`ifdef EN_NVME_PL
+        // nvme_cq_head_tracker adds its fixed four-byte CQ offset, producing
+        // PL_NVME_CQ_DB_ADDR from the hardcoded SQ address above.
+        .sq_db_addr_tbl  (pl_sq_db_addr_tbl)
+`else
         .sq_db_addr_tbl  (sq_db_addr_tbl)
+`endif
     );
 
-    // DMA Arbiter (SQ doorbell + CQ head → single DMA channel)
+`ifdef EN_NVME_HOST
+    // DMA Arbiter (SQ doorbell + CQ head → single host DMA channel)
     nvme_doorbell_arb inst_dma_req_mux (
         .aclk          (aclk),
         .aresetn       (aresetn),
@@ -359,5 +424,28 @@ module nvme_top (
         .m_dma_req     (m_db_wr_req),
         .m_axis        (m_db_wr_data)
     );
+`elsif EN_NVME_PL
+    // Keep the existing SQ/CQ scheduling logic, but turn its merged DMA-style
+    // doorbell request into an AXI-MM write accepted by design_plnvme.
+    nvme_doorbell_arb inst_nvme_pl_doorbell_arb (
+        .aclk          (aclk),
+        .aresetn       (aresetn),
+        .s_dma_req_0   (sq_dma_req),
+        .s_axis_0      (sq_dma_data),
+        .s_dma_req_1   (cq_dma_req),
+        .s_axis_1      (cq_dma_data),
+        .m_dma_req     (pl_db_dma_req),
+        .m_axis        (pl_db_dma_data)
+    );
+
+    nvme_doorbell_axi_writer inst_nvme_pl_doorbell_writer (
+        .aclk          (aclk),
+        .aresetn       (aresetn),
+        .setup_done    (nvme_setup_done),
+        .s_dma_req     (pl_db_dma_req),
+        .s_axis_data   (pl_db_dma_data),
+        .m_axi_mmio    (m_axi_nvme_mmio)
+    );
+`endif
 
 endmodule

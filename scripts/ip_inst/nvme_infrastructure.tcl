@@ -2,6 +2,17 @@
 ## NVMe infrastructure IP instantiation
 ##
 
+# Buffer NVMe-to-HBM write data independently of the stripe mapper's AW
+# expansion latency. The stripe still regenerates physical WLAST at each
+# 1 KiB fragment boundary.
+create_ip -name axis_data_fifo -vendor xilinx.com -library ip -version 2.0 -module_name axis_data_fifo_nvme_w
+set_property -dict [list \
+    CONFIG.TDATA_NUM_BYTES {64} \
+    CONFIG.FIFO_DEPTH {32} \
+    CONFIG.HAS_TSTRB {1} \
+    CONFIG.HAS_TLAST {1} \
+] [get_ips axis_data_fifo_nvme_w]
+
 # ============================================================================
 # AXI BRAM Controllers
 # ============================================================================
@@ -21,6 +32,12 @@ set_property -dict [list CONFIG.DATA_WIDTH {128} CONFIG.SINGLE_PORT_BRAM {1} CON
 # ============================================================================
 # ILA Debug Cores (instantiated only when EN_ILA_NVME_* defines are active)
 # ============================================================================
+
+# These legacy ILA 6.2 definitions are not available for the V80 part. Their
+# corresponding RTL instantiations are all disabled by default, so omit the IP
+# definitions only for the PL-connected flow. The existing UltraScale+/HOST
+# project continues to create exactly the same optional debug cores as before.
+if {$cfg(en_nvme_host) eq 1} {
 
 create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_nvme_top
 set_property -dict [list \
@@ -167,3 +184,89 @@ set_property -dict [list \
     CONFIG.C_PROBE6_WIDTH {48} CONFIG.C_PROBE7_WIDTH {1} CONFIG.C_PROBE8_WIDTH {1} \
     CONFIG.C_PROBE9_WIDTH {2} \
 ] [get_ips ila_nvme_sq_doorbell_writer]
+
+create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_nvme_stripe
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {25} CONFIG.C_EN_STRG_QUAL {1} CONFIG.C_INPUT_PIPE_STAGES {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {4} CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_PROBE0_WIDTH {1} CONFIG.C_PROBE1_WIDTH {1} CONFIG.C_PROBE2_WIDTH {64} \
+    CONFIG.C_PROBE3_WIDTH {8} CONFIG.C_PROBE4_WIDTH {3} CONFIG.C_PROBE5_WIDTH {2} \
+    CONFIG.C_PROBE6_WIDTH {1} CONFIG.C_PROBE7_WIDTH {1} CONFIG.C_PROBE8_WIDTH {512} \
+    CONFIG.C_PROBE9_WIDTH {64} CONFIG.C_PROBE10_WIDTH {1} CONFIG.C_PROBE11_WIDTH {1} \
+    CONFIG.C_PROBE12_WIDTH {1} CONFIG.C_PROBE13_WIDTH {2} CONFIG.C_PROBE14_WIDTH {1} \
+    CONFIG.C_PROBE15_WIDTH {1} CONFIG.C_PROBE16_WIDTH {64} CONFIG.C_PROBE17_WIDTH {8} \
+    CONFIG.C_PROBE18_WIDTH {3} CONFIG.C_PROBE19_WIDTH {2} CONFIG.C_PROBE20_WIDTH {1} \
+    CONFIG.C_PROBE21_WIDTH {1} CONFIG.C_PROBE22_WIDTH {512} CONFIG.C_PROBE23_WIDTH {2} \
+    CONFIG.C_PROBE24_WIDTH {1} \
+] [get_ips ila_nvme_stripe]
+
+} elseif {$cfg(en_nvme_pl) eq 1} {
+
+# Reuse the existing RTL ILA probe layouts with the Versal-compatible AXIS ILA
+# implementation. Only the runtime datapath monitors enabled in RTL are needed
+# for the PL-connected debug build.
+create_ip -name axis_ila -vendor xilinx.com -library ip -module_name ila_nvme_manage_prp
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {16} CONFIG.C_EN_STRG_QUAL {1} CONFIG.C_INPUT_PIPE_STAGES {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {4} CONFIG.C_DATA_DEPTH {1024} \
+    CONFIG.C_PROBE0_WIDTH {1} CONFIG.C_PROBE1_WIDTH {1} CONFIG.C_PROBE2_WIDTH {1} \
+    CONFIG.C_PROBE3_WIDTH {1} CONFIG.C_PROBE4_WIDTH {64} CONFIG.C_PROBE5_WIDTH {64} \
+    CONFIG.C_PROBE6_WIDTH {1} CONFIG.C_PROBE7_WIDTH {1} CONFIG.C_PROBE8_WIDTH {1} \
+    CONFIG.C_PROBE9_WIDTH {1} CONFIG.C_PROBE10_WIDTH {48} CONFIG.C_PROBE11_WIDTH {1} \
+    CONFIG.C_PROBE12_WIDTH {1} CONFIG.C_PROBE13_WIDTH {1} CONFIG.C_PROBE14_WIDTH {4} \
+    CONFIG.C_PROBE15_WIDTH {64} \
+] [get_ips ila_nvme_manage_prp]
+
+create_ip -name axis_ila -vendor xilinx.com -library ip -module_name ila_nvme_sq_ctrl
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {16} CONFIG.C_EN_STRG_QUAL {1} CONFIG.C_INPUT_PIPE_STAGES {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {4} CONFIG.C_DATA_DEPTH {1024} \
+    CONFIG.C_PROBE0_WIDTH {1} CONFIG.C_PROBE1_WIDTH {1} CONFIG.C_PROBE2_WIDTH {4} \
+    CONFIG.C_PROBE3_WIDTH {10} CONFIG.C_PROBE4_WIDTH {1} CONFIG.C_PROBE5_WIDTH {10} \
+    CONFIG.C_PROBE6_WIDTH {1} CONFIG.C_PROBE7_WIDTH {10} CONFIG.C_PROBE8_WIDTH {10} \
+    CONFIG.C_PROBE9_WIDTH {32} CONFIG.C_PROBE10_WIDTH {32} CONFIG.C_PROBE11_WIDTH {32} \
+    CONFIG.C_PROBE12_WIDTH {32} CONFIG.C_PROBE13_WIDTH {32} CONFIG.C_PROBE14_WIDTH {32} \
+    CONFIG.C_PROBE15_WIDTH {32} \
+] [get_ips ila_nvme_sq_ctrl]
+
+create_ip -name axis_ila -vendor xilinx.com -library ip -module_name ila_nvme_cq_ctrl
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {14} CONFIG.C_EN_STRG_QUAL {1} CONFIG.C_INPUT_PIPE_STAGES {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {4} CONFIG.C_DATA_DEPTH {1024} \
+    CONFIG.C_PROBE0_WIDTH {1} CONFIG.C_PROBE1_WIDTH {4} CONFIG.C_PROBE2_WIDTH {6} \
+    CONFIG.C_PROBE3_WIDTH {1} CONFIG.C_PROBE4_WIDTH {1} CONFIG.C_PROBE5_WIDTH {4} \
+    CONFIG.C_PROBE6_WIDTH {15} CONFIG.C_PROBE7_WIDTH {1} CONFIG.C_PROBE8_WIDTH {3} \
+    CONFIG.C_PROBE9_WIDTH {4} CONFIG.C_PROBE10_WIDTH {6} CONFIG.C_PROBE11_WIDTH {8} \
+    CONFIG.C_PROBE12_WIDTH {16} CONFIG.C_PROBE13_WIDTH {16} \
+] [get_ips ila_nvme_cq_ctrl]
+
+create_ip -name axis_ila -vendor xilinx.com -library ip -module_name ila_nvme_prp_ctrl
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {19} CONFIG.C_EN_STRG_QUAL {1} CONFIG.C_INPUT_PIPE_STAGES {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {4} CONFIG.C_DATA_DEPTH {1024} \
+    CONFIG.C_PROBE0_WIDTH {1} CONFIG.C_PROBE1_WIDTH {1} CONFIG.C_PROBE2_WIDTH {13} \
+    CONFIG.C_PROBE3_WIDTH {32} CONFIG.C_PROBE4_WIDTH {1} CONFIG.C_PROBE5_WIDTH {13} \
+    CONFIG.C_PROBE6_WIDTH {32} CONFIG.C_PROBE7_WIDTH {1} CONFIG.C_PROBE8_WIDTH {20} \
+    CONFIG.C_PROBE9_WIDTH {13} CONFIG.C_PROBE10_WIDTH {32} CONFIG.C_PROBE11_WIDTH {32} \
+    CONFIG.C_PROBE12_WIDTH {1} CONFIG.C_PROBE13_WIDTH {1} CONFIG.C_PROBE14_WIDTH {20} \
+    CONFIG.C_PROBE15_WIDTH {1} CONFIG.C_PROBE16_WIDTH {1} CONFIG.C_PROBE17_WIDTH {32} \
+    CONFIG.C_PROBE18_WIDTH {32} \
+] [get_ips ila_nvme_prp_ctrl]
+
+create_ip -name axis_ila -vendor xilinx.com -library ip -module_name ila_nvme_stripe
+set_property -dict [list \
+    CONFIG.C_MON_TYPE {Net_Probes} \
+    CONFIG.C_NUM_OF_PROBES {25} CONFIG.C_EN_STRG_QUAL {1} CONFIG.C_INPUT_PIPE_STAGES {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {4} CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_PROBE0_WIDTH {1} CONFIG.C_PROBE1_WIDTH {1} CONFIG.C_PROBE2_WIDTH {64} \
+    CONFIG.C_PROBE3_WIDTH {8} CONFIG.C_PROBE4_WIDTH {3} CONFIG.C_PROBE5_WIDTH {2} \
+    CONFIG.C_PROBE6_WIDTH {1} CONFIG.C_PROBE7_WIDTH {1} CONFIG.C_PROBE8_WIDTH {512} \
+    CONFIG.C_PROBE9_WIDTH {64} CONFIG.C_PROBE10_WIDTH {1} CONFIG.C_PROBE11_WIDTH {1} \
+    CONFIG.C_PROBE12_WIDTH {1} CONFIG.C_PROBE13_WIDTH {2} CONFIG.C_PROBE14_WIDTH {1} \
+    CONFIG.C_PROBE15_WIDTH {1} CONFIG.C_PROBE16_WIDTH {64} CONFIG.C_PROBE17_WIDTH {8} \
+    CONFIG.C_PROBE18_WIDTH {3} CONFIG.C_PROBE19_WIDTH {2} CONFIG.C_PROBE20_WIDTH {1} \
+    CONFIG.C_PROBE21_WIDTH {1} CONFIG.C_PROBE22_WIDTH {512} CONFIG.C_PROBE23_WIDTH {2} \
+    CONFIG.C_PROBE24_WIDTH {1} \
+] [get_ips ila_nvme_stripe]
+
+}

@@ -33,6 +33,130 @@ proc cr_bd_plnvme_debug_enabled {} {
 }
 
 ########################################################################################################
+# QDMA AXI write-data buffering hierarchy
+########################################################################################################
+# Hierarchical cell: qdma_0_w_fifo
+proc cr_bd_plnvme_axi_w_fifo { parentCell nameHier } {
+  if { $parentCell eq "" || $nameHier eq "" } {
+    catch {common::send_msg_id "BD_TCL-102" "ERROR" "cr_bd_plnvme_axi_w_fifo() - Empty argument(s)!"}
+    return
+  }
+
+  set parentObj [get_bd_cells $parentCell]
+  if { $parentObj == "" } {
+    catch {common::send_msg_id "BD_TCL-100" "ERROR" "Unable to find parent cell <$parentCell>!"}
+    return
+  }
+
+  set parentType [get_property TYPE $parentObj]
+  if { $parentType ne "hier" } {
+    catch {common::send_msg_id "BD_TCL-101" "ERROR" "Parent <$parentObj> has TYPE = <$parentType>. Expected to be <hier>."}
+    return
+  }
+
+  set oldCurInst [current_bd_instance .]
+  current_bd_instance $parentObj
+
+  set hier_obj [create_bd_cell -type hier $nameHier]
+  current_bd_instance $hier_obj
+
+  # Match the QDMA M_AXI_BRIDGE definition explicitly so that the downstream
+  # SmartConnect does not have to infer the bus widths and capabilities through
+  # the channel-level FIFO connections inside this hierarchy.
+  # Hierarchical interface parameters are read-only in IP Integrator. The
+  # explicitly configured register slices below drive their definitions.
+  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:aximm_rtl:1.0 S_AXI
+  create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 M_AXI
+
+  # The hierarchy is in the QDMA AXI domain. Leave FREQ_HZ unset here so it is
+  # inherited from qdma_0/axi_aclk rather than from the configurable shell clock.
+  create_bd_pin -dir I -type clk aclk
+  create_bd_pin -dir I -type rst aresetn
+
+  # The register slices provide complete AXI endpoints at the hierarchy
+  # boundary. Their channels are bypassed; only W is intentionally buffered.
+  set reg_slice_properties [list \
+    CONFIG.ADDR_WIDTH {64} \
+    CONFIG.ARUSER_WIDTH {55} \
+    CONFIG.AWUSER_WIDTH {55} \
+    CONFIG.BUSER_WIDTH {0} \
+    CONFIG.DATA_WIDTH {512} \
+    CONFIG.HAS_BRESP {1} \
+    CONFIG.HAS_BURST {0} \
+    CONFIG.HAS_CACHE {1} \
+    CONFIG.HAS_LOCK {1} \
+    CONFIG.HAS_PROT {1} \
+    CONFIG.HAS_QOS {0} \
+    CONFIG.HAS_REGION {0} \
+    CONFIG.HAS_RRESP {1} \
+    CONFIG.HAS_WSTRB {1} \
+    CONFIG.ID_WIDTH {4} \
+    CONFIG.MAX_BURST_LENGTH {256} \
+    CONFIG.NUM_READ_OUTSTANDING {32} \
+    CONFIG.NUM_READ_THREADS {1} \
+    CONFIG.NUM_WRITE_OUTSTANDING {32} \
+    CONFIG.NUM_WRITE_THREADS {1} \
+    CONFIG.PROTOCOL {AXI4} \
+    CONFIG.READ_WRITE_MODE {READ_WRITE} \
+    CONFIG.REG_AR {0} \
+    CONFIG.REG_AW {0} \
+    CONFIG.REG_B {0} \
+    CONFIG.REG_R {0} \
+    CONFIG.REG_W {0} \
+    CONFIG.RUSER_WIDTH {0} \
+    CONFIG.SUPPORTS_NARROW_BURST {0} \
+    CONFIG.WUSER_WIDTH {0}]
+
+  set axi_in [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_register_slice:2.1 axi_in]
+  set_property -dict $reg_slice_properties $axi_in
+  set axi_out [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_register_slice:2.1 axi_out]
+  set_property -dict $reg_slice_properties $axi_out
+
+  set w_fifo [create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo:2.0 w_fifo]
+  set_property -dict [list \
+    CONFIG.FIFO_DEPTH {32} \
+    CONFIG.FIFO_MODE {1} \
+    CONFIG.HAS_TLAST {1} \
+    CONFIG.HAS_TSTRB {1} \
+    CONFIG.IS_ACLK_ASYNC {0} \
+    CONFIG.TDATA_NUM_BYTES {64} \
+  ] $w_fifo
+
+  # Keep AR/R/AW/B as one complete AXI connection and override only its W
+  # channel with the AXIS FIFO below.
+  connect_bd_intf_net -intf_net axi_passthrough \
+    [get_bd_intf_pins axi_in/M_AXI] \
+    [get_bd_intf_pins axi_out/S_AXI]
+
+  connect_bd_net [get_bd_pins axi_in/m_axi_wdata] [get_bd_pins w_fifo/s_axis_tdata]
+  connect_bd_net [get_bd_pins axi_in/m_axi_wstrb] [get_bd_pins w_fifo/s_axis_tstrb]
+  connect_bd_net [get_bd_pins axi_in/m_axi_wlast] [get_bd_pins w_fifo/s_axis_tlast]
+  connect_bd_net [get_bd_pins axi_in/m_axi_wvalid] [get_bd_pins w_fifo/s_axis_tvalid]
+  connect_bd_net [get_bd_pins w_fifo/s_axis_tready] [get_bd_pins axi_in/m_axi_wready]
+  connect_bd_net [get_bd_pins w_fifo/m_axis_tdata] [get_bd_pins axi_out/s_axi_wdata]
+  connect_bd_net [get_bd_pins w_fifo/m_axis_tstrb] [get_bd_pins axi_out/s_axi_wstrb]
+  connect_bd_net [get_bd_pins w_fifo/m_axis_tlast] [get_bd_pins axi_out/s_axi_wlast]
+  connect_bd_net [get_bd_pins w_fifo/m_axis_tvalid] [get_bd_pins axi_out/s_axi_wvalid]
+  connect_bd_net [get_bd_pins axi_out/s_axi_wready] [get_bd_pins w_fifo/m_axis_tready]
+
+  connect_bd_net [get_bd_pins aclk] \
+    [get_bd_pins axi_in/aclk] \
+    [get_bd_pins axi_out/aclk] \
+    [get_bd_pins w_fifo/s_axis_aclk]
+  connect_bd_net [get_bd_pins aresetn] \
+    [get_bd_pins axi_in/aresetn] \
+    [get_bd_pins axi_out/aresetn] \
+    [get_bd_pins w_fifo/s_axis_aresetn]
+
+  # Connect the complete hierarchy interfaces last, after the internal
+  # channel-level wiring has been established.
+  connect_bd_intf_net [get_bd_intf_pins S_AXI] [get_bd_intf_pins axi_in/S_AXI]
+  connect_bd_intf_net [get_bd_intf_pins axi_out/M_AXI] [get_bd_intf_pins M_AXI]
+
+  current_bd_instance $oldCurInst
+}
+
+########################################################################################################
 # PL-connected NVMe PCIe support hierarchy
 ########################################################################################################
 # Hierarchical cell: qdma_0_support
@@ -189,6 +313,7 @@ proc cr_bd_plnvme_qdma_support { parentCell nameHier } {
     CONFIG.pf0_class_code_base {06} \
     CONFIG.pf0_class_code_interface {00} \
     CONFIG.pf0_class_code_sub {0A} \
+    CONFIG.pf0_dev_cap_max_payload {1024_bytes} \
     CONFIG.pf0_expansion_rom_enabled {false} \
     CONFIG.pf0_msi_enabled {false} \
     CONFIG.pf0_msix_enabled {false} \
@@ -336,10 +461,51 @@ refclk_PROT0_R0_100_MHz_unique1} \
   set ilconstant_0 [ create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 ilconstant_0 ]
   set_property CONFIG.CONST_VAL {1} $ilconstant_0
 
+  if {[cr_bd_plnvme_debug_enabled]} {
+    # Use native probes for CQ. Vivado 2025.2 fails BD validation when an AXIS
+    # interface-monitor slot is attached directly to the PCIe CQ interface.
+    set axis_ila_cq [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_ila:1.3 axis_ila_cq ]
+    set_property -dict [list \
+      CONFIG.C_DATA_DEPTH {4096} \
+      CONFIG.C_NUM_OF_PROBES {6} \
+      CONFIG.C_PROBE0_WIDTH {512} \
+      CONFIG.C_PROBE1_WIDTH {231} \
+      CONFIG.C_PROBE2_WIDTH {16} \
+    ] $axis_ila_cq
+  }
+
   # Create interface connections
   connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins pcie_phy/pcie_mgt] [get_bd_intf_pins pcie_mgt]
   connect_bd_intf_net -intf_net Conn2 [get_bd_intf_pins refclk_ibuf/CLK_IN_D] [get_bd_intf_pins pcie_refclk]
   connect_bd_intf_net -intf_net Conn3 [get_bd_intf_pins pcie/m_axis_cq] [get_bd_intf_pins m_axis_cq]
+  if {[cr_bd_plnvme_debug_enabled]} {
+    # Keep the interface connection above to propagate its definition, then
+    # make its physical CQ nets explicit so the native ILA is only a sink.
+    connect_bd_net -net pcie_m_axis_cq_tdata \
+      [get_bd_pins pcie/m_axis_cq_tdata] \
+      [get_bd_pins m_axis_cq_tdata] \
+      [get_bd_pins axis_ila_cq/probe0]
+    connect_bd_net -net pcie_m_axis_cq_tuser \
+      [get_bd_pins pcie/m_axis_cq_tuser] \
+      [get_bd_pins m_axis_cq_tuser] \
+      [get_bd_pins axis_ila_cq/probe1]
+    connect_bd_net -net pcie_m_axis_cq_tkeep \
+      [get_bd_pins pcie/m_axis_cq_tkeep] \
+      [get_bd_pins m_axis_cq_tkeep] \
+      [get_bd_pins axis_ila_cq/probe2]
+    connect_bd_net -net pcie_m_axis_cq_tlast \
+      [get_bd_pins pcie/m_axis_cq_tlast] \
+      [get_bd_pins m_axis_cq_tlast] \
+      [get_bd_pins axis_ila_cq/probe3]
+    connect_bd_net -net pcie_m_axis_cq_tvalid \
+      [get_bd_pins pcie/m_axis_cq_tvalid] \
+      [get_bd_pins m_axis_cq_tvalid] \
+      [get_bd_pins axis_ila_cq/probe4]
+    connect_bd_net -net pcie_m_axis_cq_tready \
+      [get_bd_pins m_axis_cq_tready] \
+      [get_bd_pins pcie/m_axis_cq_tready] \
+      [get_bd_pins axis_ila_cq/probe5]
+  }
   connect_bd_intf_net -intf_net Conn4 [get_bd_intf_pins pcie/m_axis_rc] [get_bd_intf_pins m_axis_rc]
   connect_bd_intf_net -intf_net Conn5 [get_bd_intf_pins pcie/pcie_cfg_fc] [get_bd_intf_pins pcie_cfg_fc]
   connect_bd_intf_net -intf_net Conn6 [get_bd_intf_pins pcie/pcie_cfg_interrupt] [get_bd_intf_pins pcie_cfg_interrupt]
@@ -430,6 +596,9 @@ refclk_PROT0_R0_100_MHz_unique1} \
   [get_bd_pins phy_rdy_out]
   connect_bd_net -net pcie_user_clk  [get_bd_pins pcie/user_clk] \
   [get_bd_pins user_clk]
+  if {[cr_bd_plnvme_debug_enabled]} {
+    connect_bd_net -net [get_bd_nets pcie_user_clk] [get_bd_pins axis_ila_cq/clk]
+  }
   connect_bd_net -net pcie_user_lnk_up  [get_bd_pins pcie/user_lnk_up] \
   [get_bd_pins user_lnk_up]
   connect_bd_net -net pcie_user_reset  [get_bd_pins pcie/user_reset] \
@@ -466,6 +635,8 @@ proc cr_bd_design_plnvme { parentCell } {
   # sentinel at the top of this file is uncommented.
   set list_check_ips [list \
     xilinx.com:inline_hdl:ilconstant:1.0 \
+    xilinx.com:ip:axi_register_slice:2.1 \
+    xilinx.com:ip:axis_data_fifo:2.0 \
     xilinx.com:ip:qdma:5.1 \
     xilinx.com:ip:smartconnect:1.0 \
     xilinx.com:ip:xpm_cdc_gen:1.0 \
@@ -594,8 +765,8 @@ proc cr_bd_design_plnvme { parentCell } {
    CONFIG.ADDR_WIDTH {64} \
    CONFIG.DATA_WIDTH {512} \
    CONFIG.FREQ_HZ $aclk_freq_hz \
-   CONFIG.NUM_READ_OUTSTANDING {16} \
-   CONFIG.NUM_WRITE_OUTSTANDING {16} \
+   CONFIG.NUM_READ_OUTSTANDING {32} \
+   CONFIG.NUM_WRITE_OUTSTANDING {32} \
    CONFIG.PROTOCOL {AXI4} \
    ] $axi_nvme_card
 
@@ -631,7 +802,7 @@ proc cr_bd_design_plnvme { parentCell } {
   set_property -dict [list \
     CONFIG.ALL_PROBE_SAME_MU_CNT {2} \
     CONFIG.C_DATA_DEPTH {1024} \
-    CONFIG.C_NUM_OF_PROBES {26} \
+    CONFIG.C_NUM_OF_PROBES {34} \
     CONFIG.C_PROBE12_WIDTH {64} \
     CONFIG.C_PROBE13_WIDTH {64} \
     CONFIG.C_PROBE14_WIDTH {64} \
@@ -644,6 +815,14 @@ proc cr_bd_design_plnvme { parentCell } {
     CONFIG.C_PROBE23_WIDTH {32} \
     CONFIG.C_PROBE24_WIDTH {64} \
     CONFIG.C_PROBE25_WIDTH {64} \
+    CONFIG.C_PROBE26_WIDTH {8} \
+    CONFIG.C_PROBE27_WIDTH {8} \
+    CONFIG.C_PROBE28_WIDTH {3} \
+    CONFIG.C_PROBE29_WIDTH {3} \
+    CONFIG.C_PROBE30_WIDTH {3} \
+    CONFIG.C_PROBE31_WIDTH {3} \
+    CONFIG.C_PROBE32_WIDTH {3} \
+    CONFIG.C_PROBE33_WIDTH {1} \
     CONFIG.C_PROBE3_WIDTH {8} \
     CONFIG.C_PROBE4_WIDTH {8} \
     CONFIG.C_PROBE7_WIDTH {16} \
@@ -706,15 +885,6 @@ proc cr_bd_design_plnvme { parentCell } {
   ] $axis_ila_3
 
 
-  # Create instance: axis_ila_4, and set properties
-  set axis_ila_4 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_ila:1.3 axis_ila_4 ]
-  set_property -dict [list \
-    CONFIG.C_DATA_DEPTH {4096} \
-    CONFIG.C_MON_TYPE {Interface_Monitor} \
-    CONFIG.C_SLOT_0_INTF_TYPE {xilinx.com:interface:aximm_rtl:1.0} \
-  ] $axis_ila_4
-
-
   # Create instance: axis_ila_5, and set properties
   set axis_ila_5 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_ila:1.3 axis_ila_5 ]
   set_property -dict [list \
@@ -764,6 +934,9 @@ proc cr_bd_design_plnvme { parentCell } {
      catch {common::send_msg_id "BD_TCL-2096" "ERROR" "Unable to add referenced block <$block_name>. Please add the files for ${block_name}'s definition into the project."}
      return 1
    }
+  # Request the Root Port's advertised 1024-byte maximum, bounded at run time
+  # by the endpoint capability discovered by the enumeration FSM.
+  set_property CONFIG.PCIE_TARGET_MPS {3} $pl_pcie_nvme_top_wra_0
 
   # Create instance: qdma_0, and set properties
   set qdma_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:qdma:5.1 qdma_0 ]
@@ -786,6 +959,9 @@ proc cr_bd_design_plnvme { parentCell } {
 
   # Create instance: qdma_0_support
   cr_bd_plnvme_qdma_support [current_bd_instance .] qdma_0_support
+
+  # Create instance: qdma_0_w_fifo
+  cr_bd_plnvme_axi_w_fifo [current_bd_instance .] qdma_0_w_fifo
 
   # Create instance: smartconnect_0, and set properties
   set smartconnect_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_0 ]
@@ -844,12 +1020,10 @@ proc cr_bd_design_plnvme { parentCell } {
   connect_bd_intf_net -intf_net S01_AXI_0_1 [get_bd_intf_ports axi_nvme_mmio] [get_bd_intf_pins smartconnect_0/S01_AXI]
   connect_bd_intf_net -intf_net nvme_pcie_clk_1 [get_bd_intf_ports nvme_pcie_clk] [get_bd_intf_pins qdma_0_support/pcie_refclk]
   connect_bd_intf_net -intf_net nvme_pcie_enum_wrapp_0_m_axi_mmio [get_bd_intf_pins pl_pcie_nvme_top_wra_0/m_axi_mmio] [get_bd_intf_pins smartconnect_0/S00_AXI]
-  if {$en_plnvme_debug} {
-    connect_bd_intf_net -intf_net [get_bd_intf_nets nvme_pcie_enum_wrapp_0_m_axi_mmio] [get_bd_intf_pins pl_pcie_nvme_top_wra_0/m_axi_mmio] [get_bd_intf_pins axis_ila_4/SLOT_0_AXI]
-  }
   connect_bd_intf_net -intf_net pl_pcie_nvme_top_wra_0_m_axil_csr [get_bd_intf_pins pl_pcie_nvme_top_wra_0/m_axil_csr] [get_bd_intf_pins smartconnect_1/S00_AXI]
   connect_bd_intf_net -intf_net pl_pcie_nvme_top_wra_0_m_axil_ecam [get_bd_intf_pins pl_pcie_nvme_top_wra_0/m_axil_ecam] [get_bd_intf_pins smartconnect_2/S00_AXI]
-  connect_bd_intf_net -intf_net qdma_0_M_AXI_BRIDGE [get_bd_intf_pins qdma_0/M_AXI_BRIDGE] [get_bd_intf_pins smartconnect_3/S00_AXI]
+  connect_bd_intf_net -intf_net qdma_0_M_AXI_BRIDGE [get_bd_intf_pins qdma_0/M_AXI_BRIDGE] [get_bd_intf_pins qdma_0_w_fifo/S_AXI]
+  connect_bd_intf_net -intf_net qdma_0_w_fifo_M_AXI [get_bd_intf_pins qdma_0_w_fifo/M_AXI] [get_bd_intf_pins smartconnect_3/S00_AXI]
   if {$en_plnvme_debug} {
     connect_bd_intf_net -intf_net [get_bd_intf_nets qdma_0_M_AXI_BRIDGE] [get_bd_intf_pins qdma_0/M_AXI_BRIDGE] [get_bd_intf_pins axis_ila_6/SLOT_0_AXI]
   }
@@ -985,6 +1159,30 @@ proc cr_bd_design_plnvme { parentCell } {
   [get_bd_pins axis_ila_1/probe4]
   connect_bd_net -net pl_pcie_nvme_top_wra_0_enum_state  [get_bd_pins pl_pcie_nvme_top_wra_0/enum_state] \
   [get_bd_pins axis_ila_1/probe3]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_rp_pcie_cap_offset \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/rp_pcie_cap_offset] \
+  [get_bd_pins axis_ila_1/probe26]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_ep_pcie_cap_offset \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/ep_pcie_cap_offset] \
+  [get_bd_pins axis_ila_1/probe27]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_rp_mps_supported \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/rp_mps_supported] \
+  [get_bd_pins axis_ila_1/probe28]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_ep_mps_supported \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/ep_mps_supported] \
+  [get_bd_pins axis_ila_1/probe29]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_selected_mps \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/selected_mps] \
+  [get_bd_pins axis_ila_1/probe30]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_rp_mps_configured \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/rp_mps_configured] \
+  [get_bd_pins axis_ila_1/probe31]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_ep_mps_configured \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/ep_mps_configured] \
+  [get_bd_pins axis_ila_1/probe32]
+  connect_bd_net -net pl_pcie_nvme_top_wra_0_mps_programmed \
+  [get_bd_pins pl_pcie_nvme_top_wra_0/mps_programmed] \
+  [get_bd_pins axis_ila_1/probe33]
   connect_bd_net -net pl_pcie_nvme_top_wra_0_last_cfg_addr  [get_bd_pins pl_pcie_nvme_top_wra_0/last_cfg_addr] \
   [get_bd_pins axis_ila_1/probe21]
   connect_bd_net -net pl_pcie_nvme_top_wra_0_last_cid  [get_bd_pins pl_pcie_nvme_top_wra_0/last_cid] \
@@ -1060,11 +1258,13 @@ proc cr_bd_design_plnvme { parentCell } {
   [get_bd_pins smartconnect_0/aresetn] \
   [get_bd_pins pl_pcie_nvme_top_wra_0/aresetn]
   connect_bd_net -net qdma_0_axi_aclk  [get_bd_pins qdma_0/axi_aclk] \
+  [get_bd_pins qdma_0_w_fifo/aclk] \
   [get_bd_pins smartconnect_0/aclk1] \
   [get_bd_pins smartconnect_1/aclk1] \
   [get_bd_pins smartconnect_2/aclk1] \
   [get_bd_pins smartconnect_3/aclk]
   connect_bd_net -net qdma_0_axi_aresetn  [get_bd_pins qdma_0/axi_aresetn] \
+  [get_bd_pins qdma_0_w_fifo/aresetn] \
   [get_bd_pins smartconnect_3/aresetn]
   connect_bd_net -net qdma_0_csr_prog_done  [get_bd_pins qdma_0/csr_prog_done] \
   [get_bd_pins xpm_cdc_gen_2/src_in]
@@ -1091,7 +1291,6 @@ proc cr_bd_design_plnvme { parentCell } {
   [get_bd_pins smartconnect_3/aclk1] \
   [get_bd_pins pl_pcie_nvme_top_wra_0/aclk]
   if {$en_plnvme_debug} {
-    connect_bd_net -net [get_bd_nets proc_sys_reset_0_peripheral_aresetn] [get_bd_pins axis_ila_4/resetn]
     connect_bd_net -net [get_bd_nets qdma_0_axi_aclk] [get_bd_pins axis_ila_5/clk]
     connect_bd_net -net [get_bd_nets qdma_0_axi_aresetn] [get_bd_pins axis_ila_5/resetn]
     connect_bd_net -net [get_bd_nets qdma_0_axi_aclk] [get_bd_pins axis_ila_6/clk]
@@ -1104,7 +1303,6 @@ proc cr_bd_design_plnvme { parentCell } {
       [get_bd_pins axis_vio_1/clk] \
       [get_bd_pins axis_ila_2/clk] \
       [get_bd_pins axis_ila_3/clk] \
-      [get_bd_pins axis_ila_4/clk] \
       [get_bd_pins axis_ila_1/clk]
   }
   connect_bd_net -net xpm_cdc_gen_0_dest_out  [get_bd_pins xpm_cdc_gen_0/dest_out] \

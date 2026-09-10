@@ -559,7 +559,7 @@ long vfpga_dev_ioctl_impl(struct vfpga_dev *device, unsigned int command, unsign
                      ((uint64_t)device_data->en_avx) | ((uint64_t)device_data->en_wb << 1) |
                      ((uint64_t)device_data->en_strm << 2) | ((uint64_t)device_data->en_mem << 3) | ((uint64_t)device_data->en_pr << 4) | 
                      ((uint64_t)device_data->en_rdma << 16) | ((uint64_t)device_data->en_tcp << 17) |
-                     ((uint64_t)device_data->en_nvme << 18);
+                     ((uint64_t)device_data->en_nvme << 18) | ((uint64_t)device_data->nvme_type << 19);
 
             tmp[1] = ((uint64_t)device_data->shell_cnfg->ctrl_cnfg);
             dbg_info("reading shell config 0x%llx\n", tmp[0]);

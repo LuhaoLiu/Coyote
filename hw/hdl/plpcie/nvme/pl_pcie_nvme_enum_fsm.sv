@@ -75,6 +75,9 @@ module pl_pcie_nvme_enum_fsm #(
 
     parameter integer LINK_SETTLE_CYCLES = 1024,
     parameter integer CSR_READY_TIMEOUT_CYCLES = 1_000_000,
+    // Highest PCIe Maximum Payload Size encoding that enumeration may select.
+    // 0=128 B, 1=256 B, 2=512 B, 3=1024 B, 4=2048 B, 5=4096 B.
+    parameter logic [2:0] PCIE_TARGET_MPS = 3'd3,
     parameter bit     REQUIRE_PHY_READY = 1'b1,
     parameter bit     REQUIRE_NVME_CLASS = 1'b1,
     parameter bit     REQUIRE_NON_PREFETCHABLE_BAR = 1'b1
@@ -154,6 +157,14 @@ module pl_pcie_nvme_enum_fsm #(
     output logic                      bdf_table_programmed,
     output logic [63:0]               nvme_cap,
     output logic [31:0]               nvme_vs,
+    output logic [7:0]                rp_pcie_cap_offset,
+    output logic [7:0]                ep_pcie_cap_offset,
+    output logic [2:0]                rp_mps_supported,
+    output logic [2:0]                ep_mps_supported,
+    output logic [2:0]                selected_mps,
+    output logic [2:0]                rp_mps_configured,
+    output logic [2:0]                ep_mps_configured,
+    output logic                      mps_programmed,
 
     // Compact debug probes.
     output logic [CFG_ADDR_WIDTH-1:0] last_cfg_addr,
@@ -233,6 +244,32 @@ module pl_pcie_nvme_enum_fsm #(
         ST_NVME_VS_RD_REQ          = 8'h72,
         ST_NVME_VS_RD_RSP          = 8'h73,
 
+        ST_RP_CAP_PTR_RD_REQ       = 8'h80,
+        ST_RP_CAP_PTR_RD_RSP       = 8'h81,
+        ST_RP_CAP_HDR_RD_REQ       = 8'h82,
+        ST_RP_CAP_HDR_RD_RSP       = 8'h83,
+        ST_RP_DEVCAP_RD_REQ        = 8'h84,
+        ST_RP_DEVCAP_RD_RSP        = 8'h85,
+        ST_EP_CAP_PTR_RD_REQ       = 8'h86,
+        ST_EP_CAP_PTR_RD_RSP       = 8'h87,
+        ST_EP_CAP_HDR_RD_REQ       = 8'h88,
+        ST_EP_CAP_HDR_RD_RSP       = 8'h89,
+        ST_EP_DEVCAP_RD_REQ        = 8'h8A,
+        ST_EP_DEVCAP_RD_RSP        = 8'h8B,
+        ST_MPS_SELECT              = 8'h8C,
+        ST_RP_DEVCTL_RD_REQ        = 8'h8D,
+        ST_RP_DEVCTL_RD_RSP        = 8'h8E,
+        ST_RP_DEVCTL_WR_REQ        = 8'h8F,
+        ST_RP_DEVCTL_WR_RSP        = 8'h90,
+        ST_RP_DEVCTL_VERIFY_REQ    = 8'h91,
+        ST_RP_DEVCTL_VERIFY_RSP    = 8'h92,
+        ST_EP_DEVCTL_RD_REQ        = 8'h93,
+        ST_EP_DEVCTL_RD_RSP        = 8'h94,
+        ST_EP_DEVCTL_WR_REQ        = 8'h95,
+        ST_EP_DEVCTL_WR_RSP        = 8'h96,
+        ST_EP_DEVCTL_VERIFY_REQ    = 8'h97,
+        ST_EP_DEVCTL_VERIFY_RSP    = 8'h98,
+
         ST_DONE                    = 8'hFE,
         ST_ERROR                   = 8'hFF
     } state_t;
@@ -260,6 +297,13 @@ module pl_pcie_nvme_enum_fsm #(
     localparam logic [7:0] ERR_RP_BAR_TYPE       = 8'h13;
     localparam logic [7:0] ERR_RP_BAR_SIZE       = 8'h14;
     localparam logic [7:0] ERR_RP_BAR_ADDRESS    = 8'h15;
+    localparam logic [7:0] ERR_RP_PCIE_CAP       = 8'h16;
+    localparam logic [7:0] ERR_EP_PCIE_CAP       = 8'h17;
+    localparam logic [7:0] ERR_MPS_ENCODING      = 8'h18;
+    localparam logic [7:0] ERR_MPS_VERIFY        = 8'h19;
+
+    localparam logic [7:0] PCIE_CAPABILITY_ID = 8'h10;
+    localparam logic [5:0] CAP_MAX_HOPS = 6'd48;
 
     localparam integer LINK_COUNT_MAX =
         (LINK_SETTLE_CYCLES < 2) ? 2 : LINK_SETTLE_CYCLES;
@@ -293,6 +337,11 @@ module pl_pcie_nvme_enum_fsm #(
     logic [31:0] bar1_mask;
     logic [31:0] rp_command_dword;
     logic [31:0] ep_command_dword;
+    logic [7:0] rp_cap_scan_offset;
+    logic [7:0] ep_cap_scan_offset;
+    logic [5:0] cap_hop_count;
+    logic [31:0] rp_device_control_dword;
+    logic [31:0] ep_device_control_dword;
 
     logic [63:0] rp_bar_mask_calculated;
     logic [63:0] rp_bar_size_calculated;
@@ -468,6 +517,97 @@ module pl_pcie_nvme_enum_fsm #(
                 cfg_cmd_valid = 1'b1;
                 cfg_cmd_addr =
                     make_ecam_addr(8'd1, 5'd0, 3'd0, 12'h008);
+            end
+
+            // Locate the conventional PCI Express capability independently
+            // for the Root Port and endpoint.  Capability offsets are not
+            // assumed to be the same across devices.
+            ST_RP_CAP_PTR_RD_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr =
+                    make_ecam_addr(8'd0, 5'd0, 3'd0, 12'h034);
+            end
+
+            ST_RP_CAP_HDR_RD_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd0, 5'd0, 3'd0, {4'd0, rp_cap_scan_offset}
+                );
+            end
+
+            ST_RP_DEVCAP_RD_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd0, 5'd0, 3'd0,
+                    {4'd0, rp_pcie_cap_offset} + 12'h004
+                );
+            end
+
+            ST_EP_CAP_PTR_RD_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr =
+                    make_ecam_addr(8'd1, 5'd0, 3'd0, 12'h034);
+            end
+
+            ST_EP_CAP_HDR_RD_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd1, 5'd0, 3'd0, {4'd0, ep_cap_scan_offset}
+                );
+            end
+
+            ST_EP_DEVCAP_RD_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd1, 5'd0, 3'd0,
+                    {4'd0, ep_pcie_cap_offset} + 12'h004
+                );
+            end
+
+            ST_RP_DEVCTL_RD_REQ,
+            ST_RP_DEVCTL_VERIFY_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd0, 5'd0, 3'd0,
+                    {4'd0, rp_pcie_cap_offset} + 12'h008
+                );
+            end
+
+            ST_RP_DEVCTL_WR_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_write = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd0, 5'd0, 3'd0,
+                    {4'd0, rp_pcie_cap_offset} + 12'h008
+                );
+                cfg_cmd_wdata =
+                    (rp_device_control_dword & 32'h0000_FF1F) |
+                    {24'd0, selected_mps, 5'd0};
+                // Device Status occupies the upper halfword and contains W1C
+                // bits, so update Device Control only.
+                cfg_cmd_wstrb = 4'b0011;
+            end
+
+            ST_EP_DEVCTL_RD_REQ,
+            ST_EP_DEVCTL_VERIFY_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd1, 5'd0, 3'd0,
+                    {4'd0, ep_pcie_cap_offset} + 12'h008
+                );
+            end
+
+            ST_EP_DEVCTL_WR_REQ: begin
+                cfg_cmd_valid = 1'b1;
+                cfg_cmd_write = 1'b1;
+                cfg_cmd_addr = make_ecam_addr(
+                    8'd1, 5'd0, 3'd0,
+                    {4'd0, ep_pcie_cap_offset} + 12'h008
+                );
+                cfg_cmd_wdata =
+                    (ep_device_control_dword & 32'h0000_FF1F) |
+                    {24'd0, selected_mps, 5'd0};
+                cfg_cmd_wstrb = 4'b0011;
             end
 
             ST_EP_CMD_RD_REQ: begin
@@ -695,6 +835,14 @@ module pl_pcie_nvme_enum_fsm #(
             bdf_table_programmed   <= 1'b0;
             nvme_cap               <= '0;
             nvme_vs                <= '0;
+            rp_pcie_cap_offset     <= '0;
+            ep_pcie_cap_offset     <= '0;
+            rp_mps_supported       <= '0;
+            ep_mps_supported       <= '0;
+            selected_mps           <= '0;
+            rp_mps_configured      <= '0;
+            ep_mps_configured      <= '0;
+            mps_programmed         <= 1'b0;
             rp_bar0_original       <= '0;
             rp_bar1_original       <= '0;
             rp_bar0_mask           <= '0;
@@ -705,6 +853,11 @@ module pl_pcie_nvme_enum_fsm #(
             bar1_mask              <= '0;
             rp_command_dword       <= '0;
             ep_command_dword       <= '0;
+            rp_cap_scan_offset     <= '0;
+            ep_cap_scan_offset     <= '0;
+            cap_hop_count          <= '0;
+            rp_device_control_dword <= '0;
+            ep_device_control_dword <= '0;
             last_cfg_addr          <= '0;
             last_csr_addr          <= '0;
             last_csr_write_data    <= '0;
@@ -747,6 +900,7 @@ module pl_pcie_nvme_enum_fsm #(
                         csr_write_index        <= '0;
                         rp_dma_bar_programmed <= 1'b0;
                         bdf_table_programmed  <= 1'b0;
+                        mps_programmed        <= 1'b0;
                         if (start)
                             state <= ST_WAIT_LINK;
                     end
@@ -995,6 +1149,277 @@ module pl_pcie_nvme_enum_fsm #(
                                     error_code <= ERR_NOT_NVME;
                                     state <= ST_ERROR;
                                 end else begin
+                                    state <= ST_RP_CAP_PTR_RD_REQ;
+                                end
+                            end
+                        end
+
+                    ST_RP_CAP_PTR_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_RP_CAP_PTR_RD_RSP;
+
+                    ST_RP_CAP_PTR_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else if (
+                                (cfg_rsp_rdata[7:0] == 8'd0) ||
+                                (cfg_rsp_rdata[7:0] < 8'h40) ||
+                                (cfg_rsp_rdata[1:0] != 2'b00)
+                            ) begin
+                                error_code <= ERR_RP_PCIE_CAP;
+                                state <= ST_ERROR;
+                            end else begin
+                                rp_cap_scan_offset <= cfg_rsp_rdata[7:0];
+                                cap_hop_count <= '0;
+                                state <= ST_RP_CAP_HDR_RD_REQ;
+                            end
+                        end
+
+                    ST_RP_CAP_HDR_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_RP_CAP_HDR_RD_RSP;
+
+                    ST_RP_CAP_HDR_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else if (
+                                cfg_rsp_rdata[7:0] == PCIE_CAPABILITY_ID
+                            ) begin
+                                rp_pcie_cap_offset <= rp_cap_scan_offset;
+                                state <= ST_RP_DEVCAP_RD_REQ;
+                            end else if (
+                                (cfg_rsp_rdata[15:8] == 8'd0) ||
+                                (cfg_rsp_rdata[15:8] < 8'h40) ||
+                                (cfg_rsp_rdata[9:8] != 2'b00) ||
+                                (cfg_rsp_rdata[15:8] ==
+                                 rp_cap_scan_offset) ||
+                                (cap_hop_count == CAP_MAX_HOPS - 1'b1)
+                            ) begin
+                                error_code <= ERR_RP_PCIE_CAP;
+                                state <= ST_ERROR;
+                            end else begin
+                                rp_cap_scan_offset <= cfg_rsp_rdata[15:8];
+                                cap_hop_count <= cap_hop_count + 1'b1;
+                                state <= ST_RP_CAP_HDR_RD_REQ;
+                            end
+                        end
+
+                    ST_RP_DEVCAP_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_RP_DEVCAP_RD_RSP;
+
+                    ST_RP_DEVCAP_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else if (cfg_rsp_rdata[2:0] > 3'd5) begin
+                                error_code <= ERR_MPS_ENCODING;
+                                state <= ST_ERROR;
+                            end else begin
+                                rp_mps_supported <= cfg_rsp_rdata[2:0];
+                                state <= ST_EP_CAP_PTR_RD_REQ;
+                            end
+                        end
+
+                    ST_EP_CAP_PTR_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_EP_CAP_PTR_RD_RSP;
+
+                    ST_EP_CAP_PTR_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else if (
+                                (cfg_rsp_rdata[7:0] == 8'd0) ||
+                                (cfg_rsp_rdata[7:0] < 8'h40) ||
+                                (cfg_rsp_rdata[1:0] != 2'b00)
+                            ) begin
+                                error_code <= ERR_EP_PCIE_CAP;
+                                state <= ST_ERROR;
+                            end else begin
+                                ep_cap_scan_offset <= cfg_rsp_rdata[7:0];
+                                cap_hop_count <= '0;
+                                state <= ST_EP_CAP_HDR_RD_REQ;
+                            end
+                        end
+
+                    ST_EP_CAP_HDR_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_EP_CAP_HDR_RD_RSP;
+
+                    ST_EP_CAP_HDR_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else if (
+                                cfg_rsp_rdata[7:0] == PCIE_CAPABILITY_ID
+                            ) begin
+                                ep_pcie_cap_offset <= ep_cap_scan_offset;
+                                state <= ST_EP_DEVCAP_RD_REQ;
+                            end else if (
+                                (cfg_rsp_rdata[15:8] == 8'd0) ||
+                                (cfg_rsp_rdata[15:8] < 8'h40) ||
+                                (cfg_rsp_rdata[9:8] != 2'b00) ||
+                                (cfg_rsp_rdata[15:8] ==
+                                 ep_cap_scan_offset) ||
+                                (cap_hop_count == CAP_MAX_HOPS - 1'b1)
+                            ) begin
+                                error_code <= ERR_EP_PCIE_CAP;
+                                state <= ST_ERROR;
+                            end else begin
+                                ep_cap_scan_offset <= cfg_rsp_rdata[15:8];
+                                cap_hop_count <= cap_hop_count + 1'b1;
+                                state <= ST_EP_CAP_HDR_RD_REQ;
+                            end
+                        end
+
+                    ST_EP_DEVCAP_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_EP_DEVCAP_RD_RSP;
+
+                    ST_EP_DEVCAP_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else if (cfg_rsp_rdata[2:0] > 3'd5) begin
+                                error_code <= ERR_MPS_ENCODING;
+                                state <= ST_ERROR;
+                            end else begin
+                                ep_mps_supported <= cfg_rsp_rdata[2:0];
+                                state <= ST_MPS_SELECT;
+                            end
+                        end
+
+                    ST_MPS_SELECT: begin
+                        if (PCIE_TARGET_MPS > 3'd5) begin
+                            error_code <= ERR_MPS_ENCODING;
+                            state <= ST_ERROR;
+                        end else begin
+                            if ((PCIE_TARGET_MPS <= rp_mps_supported) &&
+                                (PCIE_TARGET_MPS <= ep_mps_supported))
+                                selected_mps <= PCIE_TARGET_MPS;
+                            else if (rp_mps_supported <= ep_mps_supported)
+                                selected_mps <= rp_mps_supported;
+                            else
+                                selected_mps <= ep_mps_supported;
+                            state <= ST_RP_DEVCTL_RD_REQ;
+                        end
+                    end
+
+                    ST_RP_DEVCTL_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_RP_DEVCTL_RD_RSP;
+
+                    ST_RP_DEVCTL_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else begin
+                                rp_device_control_dword <= cfg_rsp_rdata;
+                                state <= ST_RP_DEVCTL_WR_REQ;
+                            end
+                        end
+
+                    ST_RP_DEVCTL_WR_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_RP_DEVCTL_WR_RSP;
+
+                    ST_RP_DEVCTL_WR_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else begin
+                                state <= ST_RP_DEVCTL_VERIFY_REQ;
+                            end
+                        end
+
+                    ST_RP_DEVCTL_VERIFY_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_RP_DEVCTL_VERIFY_RSP;
+
+                    ST_RP_DEVCTL_VERIFY_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else begin
+                                rp_mps_configured <= cfg_rsp_rdata[7:5];
+                                if (cfg_rsp_rdata[7:5] != selected_mps) begin
+                                    error_code <= ERR_MPS_VERIFY;
+                                    state <= ST_ERROR;
+                                end else begin
+                                    state <= ST_EP_DEVCTL_RD_REQ;
+                                end
+                            end
+                        end
+
+                    ST_EP_DEVCTL_RD_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_EP_DEVCTL_RD_RSP;
+
+                    ST_EP_DEVCTL_RD_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else begin
+                                ep_device_control_dword <= cfg_rsp_rdata;
+                                state <= ST_EP_DEVCTL_WR_REQ;
+                            end
+                        end
+
+                    ST_EP_DEVCTL_WR_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_EP_DEVCTL_WR_RSP;
+
+                    ST_EP_DEVCTL_WR_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else begin
+                                state <= ST_EP_DEVCTL_VERIFY_REQ;
+                            end
+                        end
+
+                    ST_EP_DEVCTL_VERIFY_REQ:
+                        if (cfg_cmd_valid && cfg_cmd_ready)
+                            state <= ST_EP_DEVCTL_VERIFY_RSP;
+
+                    ST_EP_DEVCTL_VERIFY_RSP:
+                        if (cfg_rsp_valid) begin
+                            if (cfg_response_failed) begin
+                                error_code <= cfg_rsp_timeout ?
+                                    ERR_CFG_TIMEOUT : ERR_CFG_AXI;
+                                state <= ST_ERROR;
+                            end else begin
+                                ep_mps_configured <= cfg_rsp_rdata[7:5];
+                                if (cfg_rsp_rdata[7:5] != selected_mps) begin
+                                    error_code <= ERR_MPS_VERIFY;
+                                    state <= ST_ERROR;
+                                end else begin
+                                    mps_programmed <= 1'b1;
                                     state <= ST_EP_CMD_RD_REQ;
                                 end
                             end

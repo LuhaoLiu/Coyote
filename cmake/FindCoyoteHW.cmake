@@ -162,6 +162,8 @@ set(EN_HOST_NETWORKING 0 CACHE STRING "Enable host networking")
 ##
 # Enable NVMe
 set(EN_NVME 0 CACHE STRING "Enable NVMe storage access")
+set(NVME_TYPE "HOST" CACHE STRING "NVMe connection type: HOST or PL")
+set_property(CACHE NVME_TYPE PROPERTY STRINGS HOST PL)
 
 ##
 ## RECONFIGURATION
@@ -812,6 +814,29 @@ macro(validation_checks_hw)
             message(FATAL_ERROR "PR not enabled in the shell.")
         endif()
 
+    endif()
+
+    # NVMe connection type. Keep both derived flags disabled when NVMe itself is disabled.
+    set(EN_NVME_HOST 0)
+    set(EN_NVME_PL 0)
+    if(EN_NVME)
+        string(TOUPPER "${NVME_TYPE}" NVME_TYPE)
+        if(NVME_TYPE STREQUAL "HOST")
+            if(NOT FPGA_ARCH STREQUAL "ultrascale_plus")
+                message(FATAL_ERROR "NVME_TYPE=HOST is currently supported only on UltraScale+ devices. TODO (Versal/V80): add host-connected NVMe support.")
+            endif()
+            set(EN_NVME_HOST 1)
+        elseif(NVME_TYPE STREQUAL "PL")
+            if(NOT (FDEV_NAME STREQUAL "v80" AND FPGA_ARCH STREQUAL "versal"))
+                message(FATAL_ERROR "NVME_TYPE=PL is supported only on the V80 (Versal) platform.")
+            endif()
+            if(BUILD_SHELL)
+                message(FATAL_ERROR "NVME_TYPE=PL cannot use BUILD_SHELL=1 because the shipped V80 static checkpoint does not expose the new MCIO ports. Rebuild the shell boundary with BUILD_STATIC=1; BUILD_APP remains valid against a matching generated shell. TODO: allow BUILD_SHELL after publishing a compatible static checkpoint.")
+            endif()
+            set(EN_NVME_PL 1)
+        else()
+            message(FATAL_ERROR "Invalid NVME_TYPE='${NVME_TYPE}'. Expected HOST or PL.")
+        endif()
     endif()
 
 endmacro()

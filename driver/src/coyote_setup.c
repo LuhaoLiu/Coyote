@@ -116,7 +116,9 @@ int read_shell_config(struct bus_driver_data *data) {
     dbg_info("enabled TCP/IP %d, port %d\n", data->en_tcp, data->qsfp);
 
     data->en_nvme = (data->shell_cnfg->nvme_cnfg & EN_NVME_MASK) >> EN_NVME_SHIFT;
-    dbg_info("enabled NVMe %d\n", data->en_nvme);
+    data->nvme_type = (data->shell_cnfg->nvme_cnfg & NVME_TYPE_MASK) >> NVME_TYPE_SHIFT;
+    dbg_info("enabled NVMe %d, type %s\n", data->en_nvme,
+             data->nvme_type == COYOTE_NVME_TYPE_PL ? "PL-connected" : "host-connected");
 
     data->en_net = data->en_rdma | data->en_tcp;
     if(data->en_net) {

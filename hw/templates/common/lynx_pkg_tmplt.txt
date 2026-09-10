@@ -62,6 +62,12 @@
 {% if cnfg.en_nvme %}
 `define EN_NVME
 {% endif %}
+{% if cnfg.en_nvme_host %}
+`define EN_NVME_HOST
+{% endif %}
+{% if cnfg.en_nvme_pl %}
+`define EN_NVME_PL
+{% endif %}
 {% if cnfg.en_host_networking %}
 `define EN_HOST_NETWORKING
 {% endif %}
@@ -409,6 +415,9 @@ package lynxTypes;
     localparam integer RDMA_FLOW = {{ cnfg.en_rdma }};
     localparam integer TCP_FLOW = {{ cnfg.en_tcp }};
     localparam integer NVME_FLOW = {{ cnfg.en_nvme }};
+    localparam string  NVME_TYPE = "{{ cnfg.nvme_type }}";
+    localparam integer NVME_HOST_FLOW = {{ cnfg.en_nvme_host }};
+    localparam integer NVME_PL_FLOW = {{ cnfg.en_nvme_pl }};
     localparam integer N_WBS = {{ cnfg.n_wbs }};
     localparam integer QSFP = {{ cnfg.qsfp }};
 

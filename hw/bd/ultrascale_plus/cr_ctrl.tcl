@@ -103,7 +103,7 @@ proc cr_bd_design_ctrl { parentCell } {
     }
   }
 
-  if {$cnfg(en_nvme) eq 1} {
+  if {$cnfg(en_nvme_host) eq 1} {
     set axi_nvme_prp [create_bd_intf_port -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 axi_nvme_prp]
     set_property -dict [list CONFIG.ADDR_WIDTH {64} CONFIG.DATA_WIDTH {64} CONFIG.PROTOCOL {AXI4} \
       CONFIG.HAS_BRESP {1} CONFIG.HAS_BURST {1} CONFIG.HAS_CACHE {1} CONFIG.HAS_LOCK {1} CONFIG.HAS_PROT {1} \
@@ -164,7 +164,7 @@ proc cr_bd_design_ctrl { parentCell } {
                     append cmd ":axim_ctrl_$i"
                 }
             }
-            if {$cnfg(en_nvme) eq 1} {
+            if {$cnfg(en_nvme_host) eq 1} {
                 append cmd ":axi_nvme_prp:axi_nvme_sq:axi_nvme_cq"
                 if {$cnfg(en_mem) eq 1} {
                     append cmd ":axi_card_mem"
@@ -207,7 +207,7 @@ set_property CONFIG.POLARITY ACTIVE_HIGH [get_bd_ports sys_reset]
 ########################################################################################################
   
      # Create instance: axi_interconnect_0, and set properties
-  if {$cnfg(en_nvme) eq 1} {
+  if {$cnfg(en_nvme_host) eq 1} {
     set nvme_mi 3
     if {$cnfg(en_mem) eq 1} {
       incr nvme_mi
@@ -292,8 +292,8 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_u
     }
   }
 
-  # NVMe master interfaces (prp, sq, cq); appended after the per-region axi_ctrl masters.
-  if {$cnfg(en_nvme) eq 1} {
+  # Host-connected NVMe BAR master interfaces (PRP, SQ, CQ); appended after the per-region axi_ctrl masters.
+  if {$cnfg(en_nvme_host) eq 1} {
     if {$cnfg(en_avx) eq 1} {
       set nvme_mi_base [expr {2*$cnfg(n_reg) + 1}]
     } else {
@@ -338,7 +338,7 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_u
   } else {
     set ic_last $cnfg(n_reg)
   }
-  if {$cnfg(en_nvme) eq 1} {
+  if {$cnfg(en_nvme_host) eq 1} {
     set ic_last [expr {$ic_last + $nvme_mi}]
   }
   for {set i 1} {$i <= $ic_last} {incr i} {
@@ -371,8 +371,8 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_u
     }
   }
 
-  # NVMe address segments (must match driver-side AXI BRAM controller MEM_DEPTHs).
-  if {$cnfg(en_nvme) eq 1} {
+  # Host-connected NVMe BAR address segments (must match driver-side AXI BRAM controller MEM_DEPTHs).
+  if {$cnfg(en_nvme_host) eq 1} {
     create_bd_addr_seg -range 0x00010000 -offset 0x04010000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_sq/Reg]   SEG_axi_nvme_sq_Reg
     create_bd_addr_seg -range 0x00010000 -offset 0x04020000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_cq/Reg]   SEG_axi_nvme_cq_Reg
     create_bd_addr_seg -range 0x00400000 -offset 0x04800000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_prp/Reg]  SEG_axi_nvme_prp_Reg

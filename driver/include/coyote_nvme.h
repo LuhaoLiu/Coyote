@@ -23,9 +23,12 @@
  * @file coyote_nvme.h
  * @brief NVMe device management for the Coyote driver
  *
- * Per-device discovery, controller initialization, admin/I/O queue setup, and
- * per-region LBA permission management for NVMe SSDs accessed by the FPGA shell
- * via the SQ/CQ BRAM controllers and the nvme_cnfg_slave AXI-Lite register block.
+ * Host-connected devices use per-device PCI discovery, controller
+ * initialization, admin/I/O queue setup, and per-region LBA permission
+ * management. PL-connected devices retain the same public ABI and permission
+ * model, but their controller lifecycle belongs to design_plnvme; those entry
+ * points remain explicit TODO stubs until the observed namespace parameters and
+ * logical-device registration are finalized.
  *
  * All entry points are only meaningful when EN_NVME is set in the loaded bitstream;
  * callers must check bd_data->en_nvme before invoking.
@@ -42,7 +45,7 @@ int  nvme_mgr_init(struct bus_driver_data *bd_data);
 /// Free bd_data->nvme_mgr; called during driver teardown
 void nvme_mgr_free(struct bus_driver_data *bd_data);
 
-/// Claim an NVMe device by BDF, set up admin queue, identify namespace and allocate an LBA range for the given region; populates *req
+/// Initialize NVMe access for a region; HOST uses BDF discovery, while PL currently returns -EOPNOTSUPP pending logical-device registration
 long vfpga_nvme_init(struct vfpga_dev *device, struct nvme_init_ioctl *req);
 
 /// Release the LBA range previously allocated to this region; tears down the device if no regions remain

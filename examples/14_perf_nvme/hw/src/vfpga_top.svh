@@ -318,11 +318,15 @@ always_ff @(posedge aclk) begin
     end
 end
 
-// Sticky error capture; cleared on next go pulse
+// cq_rsp is {device[3:0], assigned CID[5:0], local error[5:0]}.
+// Successful assignments do not change completion/inflight counters. This
+// counting benchmark does not need a request-to-CID map.
+// Sticky local error capture; keep the existing zero-extended ERROR_REG format.
 always_ff @(posedge aclk) begin
     if (!aresetn)                                                last_error <= '0;
     else if (go_pulse)                                           last_error <= '0;
-    else if (s_nvme_cq_rsp.valid && s_nvme_cq_rsp.data != 16'h0) last_error <= s_nvme_cq_rsp.data;
+    else if (s_nvme_cq_rsp.valid && s_nvme_cq_rsp.ready && s_nvme_cq_rsp.data[5:0] != 0)
+        last_error <= {10'b0, s_nvme_cq_rsp.data[5:0]};
 end
 
 ///////////////////////////////////////
@@ -356,6 +360,9 @@ end
 ///////////////////////////////////////
 //       ILA FOR DEBUGGING          //
 /////////////////////////////////////
+// Uncomment for a separate vFPGA-clock capture; disabled for PCIe-only debug.
+// `define EN_ILA_PERF_NVME
+`ifdef EN_ILA_PERF_NVME
 ila_perf_nvme inst_ila_perf_nvme (
     .clk    (aclk),
     .probe0 ({dev_state[3], dev_state[2], dev_state[1], dev_state[0]}),  // 8
@@ -371,7 +378,35 @@ ila_perf_nvme inst_ila_perf_nvme (
     .probe10(bench_timer[31:0]),                                          // 32
     .probe11(last_error),                                                 // 16
     .probe12(s_nvme_cq_rsp.valid),                                        // 1
-    .probe13(s_nvme_cq_rsp.data),                                         // 16
+    .probe13(s_nvme_cq_rsp.data),                                         // {device[3:0], CID[5:0], error[5:0]}
     .probe14(latch_dev_mask[BENCH_MAX_DEVS-1:0]),                         // 4
-    .probe15(go_pulse)                                                    // 1
+    .probe15(go_pulse),                                                   // 1
+
+    // Request-side detail: prove exactly what crosses vFPGA -> NVMe.
+    .probe16(aresetn),                                                    // 1
+    .probe17({dev_req_valid[3], dev_req_valid[2],
+              dev_req_valid[1], dev_req_valid[0]}),                      // 4
+    .probe18({dev_req_grant[3], dev_req_grant[2],
+              dev_req_grant[1], dev_req_grant[0]}),                      // 4
+    .probe19({dev_inflight[3][7:0], dev_inflight[2][7:0],
+              dev_inflight[1][7:0], dev_inflight[0][7:0]}),              // 32
+    .probe20(m_nvme_sq.data.vaddr),                                       // VADDR_BITS = 48
+    .probe21(m_nvme_sq.data.naddr),                                       // VADDR_BITS = 48
+    .probe22(m_nvme_sq.data.len),                                         // LEN_BITS = 28
+    .probe23({m_nvme_sq.data.writeRead, m_nvme_sq.data.nsid,
+              m_nvme_sq.data.dev_id}),                                   // 1 + 4 + 4
+
+    // Completion-side detail: distinguish a real successful completion from
+    // a wrong CID/device, an NVMe status error, or a missing handshake.
+    .probe24(s_nvme_cpl.ready),                                           // 1
+    .probe25(s_nvme_cpl.data.cid),                                        // NVME_QUEUE_BITS = 6
+    .probe26(s_nvme_cpl.data.status),                                     // 15
+    .probe27(s_nvme_cpl.data.phase),                                      // 1
+    .probe28(s_nvme_cq_rsp.ready),                                        // 1
+
+    // Latched run limits explain stalls caused by configuration/counters.
+    .probe29(latch_chunk_size),                                           // 32
+    .probe30(latch_n_reps),                                               // 32
+    .probe31(latch_max_outstanding)                                       // 32
 );
+`endif

@@ -18,8 +18,8 @@ A high-level walk-through of a single run:
 1. The host claims the requested NVMe SSDs via `IOCTL_NVME_INIT`. Internally the driver takes over the PCI device, brings up the controller, sets up an admin queue, identifies the active namespace and creates an I/O SQ/CQ whose memory lives in FPGA BRAM. The kernel returns the assigned `dev_id` (one per device) plus per-namespace info (LBA size, NSZE, MDTS).
 2. The host writes the benchmark CSRs (buffer base address, chunk size, number of repetitions per device, starting LBA, device mask, max outstanding, namespace) and pulses `CTRL_REG`.
 3. Per-device FSMs in the vFPGA build `req_t` NVMe submission requests (`strm = STRM_NVME`) and feed them to a round-robin arbiter, which forwards them to the shell NVMe pipeline on `m_nvme_sq`.
-4. The shell pipeline performs vaddr→paddr translation (via `tlb_fsm` with `STRM_NVME`), builds the NVMe SQE, writes it into the FPGA SQ BRAM and rings the SSD's SQ doorbell via DMA. The SSD then DMAs the requested data to/from the host buffer.
-5. Completions flow back through the CQ BRAM, are decoded by the shell into `nvme_cqe_t` and broadcast to all regions as `s_nvme_cpl`. Each per-device FSM consumes completions targeting its `dev_id`, decrements its inflight counter and increments its done counter. When all devices have reached `dev_done >= N_REPS` with no inflight commands, the bench is complete.
+4. The shell pipeline translates the buffer address, finishes the PRP list, and stores the NVMe SQE. It enqueues an assignment response on `s_nvme_cq_rsp` before requesting the SQ doorbell. The SSD then transfers the payload to/from the buffer (HBM in the PL read benchmark).
+5. Completions flow back through the CQ BRAM, are decoded into `nvme_cqe_t`, and route to the owning region as `s_nvme_cpl`. Each per-device FSM consumes completions targeting its `dev_id`, decrements its inflight counter and increments its done counter. When all devices have reached `dev_done >= N_REPS` with no inflight commands, the bench is complete.
 6. The host polls `DONE_REG` until it matches the expected count and reads `TIMER_REG` to compute the aggregated bandwidth.
 
 The bench engine supports running a subset of devices via the `DEV_MASK` register, so the same hardware build can sweep individual devices or all devices in parallel without re-synthesizing.
@@ -29,13 +29,25 @@ The bench engine supports running a subset of devices via the `DEV_MASK` registe
 NVMe submission requests from the vFPGA are sent as `req_t` values with `strm == STRM_NVME`. The relevant fields are:
 - `dev_id`  : NVMe device index assigned by the driver (`0..MAX_NVME_DEVICES-1`)
 - `nsid`    : namespace identifier (typically `1` for a single-namespace SSD)
-- `vaddr`   : host buffer virtual address (translated by the shared `tlb_fsm` pipeline)
+- `vaddr`   : buffer virtual address (translated by the shared `tlb_fsm` pipeline)
 - `len`     : transfer length in bytes (must be a multiple of `lba_size`)
 - `naddr`   : starting LBA byte offset within the per-region LBA range
 - `writeRead`: `1` for WRITE, `0` for READ
 
-### NVMe completion interface (`s_nvme_cpl`)
-Completions arrive as `nvme_cqe_t` (`dev_id`, `status[14:0]`, `phase`). The bench engine in this example demuxes them by `dev_id` to update per-device counters. The `s_nvme_cq_rsp` channel additionally surfaces front-end errors (e.g. permission denied, namespace unknown) on a per-request basis; this example latches the most recent error code into the `ERROR_REG` CSR for visibility.
+### NVMe completion interface (`s_nvme_cq_rsp` and `s_nvme_cpl`)
+Completions arrive as `nvme_cqe_t` (`dev_id[3:0]`, `cid[5:0]`, `status[14:0]`, `phase`). The bench engine demuxes them by `dev_id` to update per-device counters. Completions can arrive out of submission order.
+
+The 16-bit `s_nvme_cq_rsp` channel returns one response per accepted request, in submission order within the region:
+
+| Bits | Meaning |
+| --- | --- |
+| `[15:12]` | Device ID |
+| `[11:6]` | Assigned CID, valid only on success |
+| `[5:0]` | Local error: 0 success, 1 device/namespace unknown, 3 PRP preparation failure, 6 permission/range failure |
+
+Successful assignments do not count as completions or return outstanding-command credits. The benchmark ignores them and captures only a nonzero local error into the existing zero-extended `ERROR_REG`; a successful response can have a nonzero packed value. A local failure still requires treating the benchmark run as failed and resetting before retry: its existing inflight counter only decrements on `s_nvme_cpl`.
+
+An application can pair ordered responses with pending requests to learn their `(device, CID)` assignments. Response and completion delivery are independent under backpressure, and CID reuse is allowed while old notifications remain buffered. The application must handle a completion received before its assignment and preserve the order of successive uses of the same `(device, CID)`. The core adds no user-delivery gates. The count-based benchmark does not need such a mapping.
 
 ### Per-device FSM + round-robin arbiter
 The vFPGA instantiates `BENCH_MAX_DEVS` (default 4) independent FSMs. Each FSM owns its own inflight counter, send pointer and timer, and produces a single `dev_req` to a round-robin arbiter that feeds the shell on `m_nvme_sq`. This keeps the worst-case bandwidth bounded by the shell's single-NVMe-pipeline arbitration rather than by per-device serial issue.

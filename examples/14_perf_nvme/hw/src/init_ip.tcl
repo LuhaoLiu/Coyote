@@ -9,7 +9,7 @@ if {$cfg(fpga_arch) eq "ultrascale_plus"} {
 }
 
 set_property -dict [list \
-    CONFIG.C_NUM_OF_PROBES {16} \
+    CONFIG.C_NUM_OF_PROBES {32} \
     CONFIG.C_EN_STRG_QUAL {1} \
     CONFIG.C_INPUT_PIPE_STAGES {1} \
     CONFIG.ALL_PROBE_SAME_MU_CNT {4} \
@@ -30,4 +30,20 @@ set_property -dict [list \
     CONFIG.C_PROBE13_WIDTH {16} \
     CONFIG.C_PROBE14_WIDTH {4}  \
     CONFIG.C_PROBE15_WIDTH {1}  \
+    CONFIG.C_PROBE16_WIDTH {1}  \
+    CONFIG.C_PROBE17_WIDTH {4}  \
+    CONFIG.C_PROBE18_WIDTH {4}  \
+    CONFIG.C_PROBE19_WIDTH {32} \
+    CONFIG.C_PROBE20_WIDTH {48} \
+    CONFIG.C_PROBE21_WIDTH {48} \
+    CONFIG.C_PROBE22_WIDTH {28} \
+    CONFIG.C_PROBE23_WIDTH {9}  \
+    CONFIG.C_PROBE24_WIDTH {1}  \
+    CONFIG.C_PROBE25_WIDTH {6}  \
+    CONFIG.C_PROBE26_WIDTH {15} \
+    CONFIG.C_PROBE27_WIDTH {1}  \
+    CONFIG.C_PROBE28_WIDTH {1}  \
+    CONFIG.C_PROBE29_WIDTH {32} \
+    CONFIG.C_PROBE30_WIDTH {32} \
+    CONFIG.C_PROBE31_WIDTH {32} \
 ] [get_ips ila_perf_nvme]

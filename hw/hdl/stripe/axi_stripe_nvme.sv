@@ -30,7 +30,7 @@ module axi_stripe_nvme #(
 );
 
 // Comment out this define to remove the post-BD NVMe card-path ILA.
-`define EN_ILA_NVME_STRIPE
+// `define EN_ILA_NVME_STRIPE
 `ifdef EN_ILA_NVME_STRIPE
 ila_nvme_stripe inst_ila_nvme_stripe (
     .clk    (aclk),

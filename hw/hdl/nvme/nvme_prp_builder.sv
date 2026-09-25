@@ -43,6 +43,7 @@ module nvme_prp_builder #(
 
     metaIntf.s          s_nvme_prp_req,       // nvme_prp_req_t
     metaIntf.m          m_nvme_prp_rsp,       // nvme_prp_rsp_t
+    output logic       m_prp_fault,          // accompanies PRP response handshake
 
     metaIntf.m          m_nvme_mmu_req,       // req_t (strm=STRM_NVME)
     metaIntf.s          s_nvme_mmu_rsp,       // nvme_mmu_rsp_t
@@ -61,20 +62,36 @@ module nvme_prp_builder #(
     localparam logic [63:0] PL_RP_DMA_PCIE_BASE =
         64'h0000_1000_0000_0000;
 
+    // BD-local [4 TiB, 8 TiB) is a routing window for host memory. The Root
+    // Complex removes PL_RP_DMA_PCIE_BASE, SmartConnect selects axi_nvme_host
+    // from bit 42, and nvme_axi_host_bridge clears that bit before host DMA.
+    localparam logic [63:0] PL_HOST_ROUTE_BASE =
+        64'h0000_0400_0000_0000;
+
     // SSD-visible address of the PRP-list window. PG344 translates it to the
     // BD-local axi_nvme_prp segment at 0x0FFF_F480_0000.
     localparam logic [63:0] PL_PRP_PCIE_BASE =
         64'h0000_1FFF_F480_0000;
 
-    // IMPORTANT: the temporary raw-address handling in the is_host branches
-    // below can alias the zero-based card aperture. PL software must keep
-    // host-backed NVMe requests disabled until the host translation TODO is
-    // implemented (or such requests are explicitly rejected in hardware).
-
     function automatic logic [63:0] pl_extend_paddr(
         input logic [PADDR_BITS-1:0] paddr
     );
         pl_extend_paddr = {{(64-PADDR_BITS){1'b0}}, paddr};
+    endfunction
+
+    function automatic logic pl_host_paddr_valid(
+        input logic [PADDR_BITS-1:0] paddr
+    );
+        // Address bit 42 is reserved as the host/card routing tag.
+        pl_host_paddr_valid = (paddr[PADDR_BITS-1:42] == '0);
+    endfunction
+
+    function automatic logic [63:0] pl_encode_paddr(
+        input logic [PADDR_BITS-1:0] paddr,
+        input logic                  is_host
+    );
+        pl_encode_paddr = pl_extend_paddr(paddr) + PL_RP_DMA_PCIE_BASE +
+                          (is_host ? PL_HOST_ROUTE_BASE : 64'd0);
     endfunction
 `endif
 
@@ -123,6 +140,7 @@ module nvme_prp_builder #(
 
         m_nvme_prp_rsp.valid       = 1'b0;
         m_nvme_prp_rsp.data        = '0;
+        m_prp_fault               = 1'b0;
 
         m_nvme_prp_write_req.valid = 1'b0;
         m_nvme_prp_write_req.data  = '0;
@@ -175,15 +193,14 @@ module nvme_prp_builder #(
                 // Set PRP1
                 prp_rsp_N = prp_rsp_C;
 `ifdef EN_NVME_PL
-                if (mmu_rsp_C.is_host == 1'b0) begin
-                    prp_rsp_N.prp1 = pl_extend_paddr(mmu_rsp_C.paddr) +
-                                     PL_RP_DMA_PCIE_BASE;
+                if (mmu_rsp_C.is_host &&
+                    !pl_host_paddr_valid(mmu_rsp_C.paddr)) begin
+                    // Host physical addresses >= 4 TiB collide with the route
+                    // tag and cannot be represented by the current aperture.
+                    state_N = ST_FAULT;
                 end else begin
-                    // TODO (PL-connected NVMe): translate host-memory physical
-                    // addresses into the reserved axi_nvme_host aperture. The BD
-                    // host master remains terminated until that path exists.
-                    prp_rsp_N.prp1 = pl_extend_paddr(mmu_rsp_C.paddr);
-                end
+                    prp_rsp_N.prp1 = pl_encode_paddr(
+                        mmu_rsp_C.paddr, mmu_rsp_C.is_host);
 `else
                 if (mmu_rsp_C.is_host == 1'b0)
                     prp_rsp_N.prp1 = mmu_rsp_C.paddr + FPGA_BAR_BASE;
@@ -200,6 +217,9 @@ module nvme_prp_builder #(
                     // >4KB: Need PRP2, send MMU request
                     state_N = ST_SEND_MMU_PRP2;
                 end
+`ifdef EN_NVME_PL
+                end
+`endif
             end
 
             // ST_SEND_PRP_4KB: Send PRP response (4KB case)
@@ -225,7 +245,12 @@ module nvme_prp_builder #(
                 if (s_nvme_mmu_rsp.valid) begin
                     mmu_rsp_N = s_nvme_mmu_rsp.data;
 
-                    if (s_nvme_mmu_rsp.data.fault) begin
+                    if (s_nvme_mmu_rsp.data.fault
+`ifdef EN_NVME_PL
+                        || (s_nvme_mmu_rsp.data.is_host &&
+                            !pl_host_paddr_valid(s_nvme_mmu_rsp.data.paddr))
+`endif
+                    ) begin
                         // Translation fault → abort
                         state_N = ST_FAULT;
                     end
@@ -233,16 +258,9 @@ module nvme_prp_builder #(
                         // 8KB: PRP2 is direct address
                         prp_rsp_N = prp_rsp_C;
 `ifdef EN_NVME_PL
-                        if (s_nvme_mmu_rsp.data.is_host == 1'b0) begin
-                            prp_rsp_N.prp2 =
-                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr) +
-                                PL_RP_DMA_PCIE_BASE;
-                        end else begin
-                            // TODO (PL-connected NVMe): apply the future host
-                            // aperture translation before enabling axi_nvme_host.
-                            prp_rsp_N.prp2 =
-                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr);
-                        end
+                        prp_rsp_N.prp2 = pl_encode_paddr(
+                            s_nvme_mmu_rsp.data.paddr,
+                            s_nvme_mmu_rsp.data.is_host);
 `else
                         if (s_nvme_mmu_rsp.data.is_host == 1'b0)
                             prp_rsp_N.prp2 = s_nvme_mmu_rsp.data.paddr + FPGA_BAR_BASE;
@@ -270,16 +288,9 @@ module nvme_prp_builder #(
                         // Prepare first write entry
                         prp_write_N.addr = {prp_req_C.dev_id, prp_req_C.sq_tail, {PRP_ADDR_BITS{1'b0}}};
 `ifdef EN_NVME_PL
-                        if (s_nvme_mmu_rsp.data.is_host == 1'b0) begin
-                            prp_write_N.data =
-                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr) +
-                                PL_RP_DMA_PCIE_BASE;
-                        end else begin
-                            // TODO (PL-connected NVMe): apply the future host
-                            // aperture translation before enabling axi_nvme_host.
-                            prp_write_N.data =
-                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr);
-                        end
+                        prp_write_N.data = pl_encode_paddr(
+                            s_nvme_mmu_rsp.data.paddr,
+                            s_nvme_mmu_rsp.data.is_host);
 `else
                         if (s_nvme_mmu_rsp.data.is_host == 1'b0)
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr + FPGA_BAR_BASE;
@@ -287,7 +298,9 @@ module nvme_prp_builder #(
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr;
 `endif
 
-                        state_N = ST_SEND_PRP_MULT;
+                        // Do not expose PRP2 until its entire list is stored.
+                        // prp_req_C.sq_tail carries the allocated CID/PRP slot.
+                        state_N = ST_SEND_WRITE_MULT;
                     end
                 end
             end
@@ -302,13 +315,13 @@ module nvme_prp_builder #(
                 end
             end
 
-            // ST_SEND_PRP_MULT: Send PRP response (>8KB, with list)
+            // Publish success only after the final list write reaches PRP RAM.
             ST_SEND_PRP_MULT: begin
                 m_nvme_prp_rsp.valid = 1'b1;
                 m_nvme_prp_rsp.data  = prp_rsp_C;
 
                 if (m_nvme_prp_rsp.ready) begin
-                    state_N = ST_SEND_WRITE_MULT;
+                    state_N = ST_IDLE;
                 end
             end
 
@@ -319,7 +332,7 @@ module nvme_prp_builder #(
 
                 if (m_nvme_prp_write_req.ready) begin
                     prp_write_N.addr = prp_write_C.addr + 1'b1;
-                    state_N = ST_WAIT_MMU_MULT;
+                    state_N = mmu_rsp_C.last ? ST_SEND_PRP_MULT : ST_WAIT_MMU_MULT;
                 end
             end
 
@@ -329,7 +342,12 @@ module nvme_prp_builder #(
                 if (s_nvme_mmu_rsp.valid) begin
                     mmu_rsp_N = s_nvme_mmu_rsp.data;
 
-                    if (s_nvme_mmu_rsp.data.fault) begin
+                    if (s_nvme_mmu_rsp.data.fault
+`ifdef EN_NVME_PL
+                        || (s_nvme_mmu_rsp.data.is_host &&
+                            !pl_host_paddr_valid(s_nvme_mmu_rsp.data.paddr))
+`endif
+                    ) begin
                         // Translation fault → abort
                         state_N = ST_FAULT;
                     end
@@ -337,16 +355,9 @@ module nvme_prp_builder #(
                         // Prepare write data
                         prp_write_N = prp_write_C;
 `ifdef EN_NVME_PL
-                        if (s_nvme_mmu_rsp.data.is_host == 1'b0) begin
-                            prp_write_N.data =
-                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr) +
-                                PL_RP_DMA_PCIE_BASE;
-                        end else begin
-                            // TODO (PL-connected NVMe): apply the future host
-                            // aperture translation before enabling axi_nvme_host.
-                            prp_write_N.data =
-                                pl_extend_paddr(s_nvme_mmu_rsp.data.paddr);
-                        end
+                        prp_write_N.data = pl_encode_paddr(
+                            s_nvme_mmu_rsp.data.paddr,
+                            s_nvme_mmu_rsp.data.is_host);
 `else
                         if (s_nvme_mmu_rsp.data.is_host == 1'b0)
                             prp_write_N.data = s_nvme_mmu_rsp.data.paddr + FPGA_BAR_BASE;
@@ -367,7 +378,12 @@ module nvme_prp_builder #(
                 if (m_nvme_prp_write_req.ready) begin
                     if (mmu_rsp_C.last) begin
                         // Last entry written
-                        state_N = ST_IDLE;
+                        state_N = ST_SEND_PRP_MULT;
+                    end
+                    else if (&prp_write_C.addr[PRP_ADDR_BITS-1:0]) begin
+                        // A list must never wrap into another CID's storage.
+                        // Drain remaining translations and fail unpublished.
+                        state_N = ST_FAULT;
                     end
                     else begin
                         // More entries to come
@@ -377,9 +393,18 @@ module nvme_prp_builder #(
                 end
             end
 
-            // ST_FAULT: abort command, no PRP issued
+            // MMU faults terminate with last=1. Local address rejection or
+            // list overflow can precede further responses: drain through last
+            // to preserve pairing with the next command, then return failure.
             ST_FAULT: begin
-                state_N = ST_IDLE;
+                if (!mmu_rsp_C.last) begin
+                    s_nvme_mmu_rsp.ready = 1'b1;
+                    if (s_nvme_mmu_rsp.valid) mmu_rsp_N = s_nvme_mmu_rsp.data;
+                end else begin
+                    m_nvme_prp_rsp.valid = 1'b1;
+                    m_prp_fault = 1'b1;
+                    if (m_nvme_prp_rsp.ready) state_N = ST_IDLE;
+                end
             end
 
             default: begin
@@ -407,7 +432,7 @@ module nvme_prp_builder #(
     end
 
     // ILA Debug
-`define EN_ILA_NVME_MANAGE_PRP
+// `define EN_ILA_NVME_MANAGE_PRP
 `ifdef EN_ILA_NVME_MANAGE_PRP
     ila_nvme_manage_prp inst_ila_nvme_manage_prp (
         .clk    (aclk),
@@ -421,7 +446,7 @@ module nvme_prp_builder #(
         .probe7 (m_nvme_mmu_req.ready),                 // 1
         .probe8 (s_nvme_mmu_rsp.valid),                 // 1
         .probe9 (s_nvme_mmu_rsp.ready),                 // 1
-        .probe10(s_nvme_mmu_rsp.data.paddr),            // ADDR_BITS (48)
+        .probe10(48'(s_nvme_mmu_rsp.data.paddr)),       // Existing 48-bit ILA address probe
         .probe11(s_nvme_mmu_rsp.data.fault),            // 1
         .probe12(m_nvme_prp_write_req.valid),           // 1
         .probe13(m_nvme_prp_write_req.ready),           // 1

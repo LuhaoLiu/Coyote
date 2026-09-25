@@ -44,6 +44,7 @@ module nvme_sq_ctrl #(
 
     // From cmd_sqe stage
     metaIntf.s          s_sqe,       // nvme_sqe_t
+    input logic [SQ_ADDR_BITS-1:0] s_cid, // independent of SQ slot
 
     // AXI access to observe/debug SQE contents (512-bit view)
     AXI4.s              s_axi_nvme_sq
@@ -56,16 +57,16 @@ module nvme_sq_ctrl #(
 
     // Write port A (from s_sqe)
     logic                      a_en;
-    logic [24:0]               a_we;
+    logic [26:0]               a_we;
     logic [ADDR_BITS-1:0]      a_addr;
-    logic [199:0]              a_data_in;
+    logic [215:0]              a_data_in;
 
     // Read port B (from AXI BRAM controller)
     logic                      bram_en_a;
     logic [BRAM_ADDR_WIDTH-1:0] bram_addr_a;    // full byte address
     logic [ADDR_BITS-1:0]      b_addr;           // entry index into RAM
     logic [ADDR_BITS-1:0]      b_addr_q;         // 1-cycle delayed for CID alignment
-    logic [199:0]              b_data_out;
+    logic [215:0]              b_data_out;
 
     // 512-bit SQE view presented to AXI bram controller
     logic [511:0]              sq_entry_wire;
@@ -171,7 +172,7 @@ module nvme_sq_ctrl #(
     //   b_addr      = entry index = bram_addr_a >> 6
     assign b_addr = bram_addr_a[BRAM_ADDR_WIDTH-1 : BRAM_BYTE_BITS];
 
-    // Register b_addr (2 stages) to align CID with b_data_out
+    // Register the read slot for debug alongside b_data_out
     logic [ADDR_BITS-1:0] b_addr_q1;
     always_ff @(posedge aclk) begin
         if (!aresetn) begin
@@ -184,11 +185,11 @@ module nvme_sq_ctrl #(
     end
 
     // SQ BRAM (1-cycle read latency + external reg = 2 total)
-    logic [199:0] b_data_out_raw;
+    logic [215:0] b_data_out_raw;
 
     ram_sdp_nc #(
         .ADDR_BITS (ADDR_BITS),
-        .DATA_BITS (200)
+        .DATA_BITS (216)
     ) inst_nvme_sq_bram (
         .clk        (aclk),
         .a_en       (a_en),
@@ -208,13 +209,14 @@ module nvme_sq_ctrl #(
     end
 
     // Ingress: cmd_sqe -> BRAM write
-    // Store layout (200b):
+    // Store layout (216b): CID is stored with the command, not derived from its slot.
     // [  3:  0] cmd4
     // [  7:  4] nsid4
     // [ 71:  8] prp1  (64)
     // [135: 72] prp2  (64)
     // [183:136] slba48
     // [199:184] nlba16
+    // [215:200] cid16
     always_comb begin
         logic [3:0] cmd4;
         logic [3:0] nsid4;
@@ -223,7 +225,7 @@ module nvme_sq_ctrl #(
         nsid4 = s_sqe.data.nsid[3:0];
 
         a_en      = s_sqe.valid;
-        a_we      = {25{s_sqe.valid}};
+        a_we      = {27{s_sqe.valid}};
         a_addr    = s_sqe.data.entry;
 
         a_data_in = '0;
@@ -233,12 +235,13 @@ module nvme_sq_ctrl #(
         a_data_in[135:72]  = s_sqe.data.prp2;
         a_data_in[183:136] = s_sqe.data.slba[47:0];
         a_data_in[199:184] = s_sqe.data.nlba[15:0];
+        a_data_in[215:200] = 16'(s_cid);
 
         s_sqe.ready = 1'b1;
     end
 
-    // Egress: BRAM (200b) -> 512b NVMe SQE view for AXI reads
-    // CID from registered b_addr_q
+    // Egress: BRAM (216b) -> 512b NVMe SQE view for AXI reads
+    // CID travels with its command through the RAM read latency.
     always_comb begin
         logic [15:0] cid16;
         logic [7:0]  opcode8;
@@ -248,7 +251,7 @@ module nvme_sq_ctrl #(
         logic [63:0] slba64;
         logic [15:0] nlba16;
 
-        cid16   = {{(16-ADDR_BITS){1'b0}}, b_addr_q};   // registered addr
+        cid16   = b_data_out[215:200];
         opcode8 = {4'b0, b_data_out[3:0]};
         nsid32  = {28'b0, b_data_out[7:4]};
         prp1_64 = b_data_out[71:8];
@@ -293,7 +296,7 @@ module nvme_sq_ctrl #(
     end
 
     // ILA Debug
-`define EN_ILA_NVME_SQ_CTRL
+// `define EN_ILA_NVME_SQ_CTRL
 `ifdef EN_ILA_NVME_SQ_CTRL
     ila_nvme_sq_ctrl inst_ila_nvme_sq_ctrl (
         .clk    (aclk),

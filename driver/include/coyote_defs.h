@@ -666,6 +666,12 @@ struct nvme_fpga_cnfg_regs {
     uint64_t perm_lba_offset;       // 0x50
     uint64_t perm_lba_size;         // 0x58
     uint64_t perm_valid;            // 0x60 - W1S: bit[0]=commit permission
+    /* The following registers exist only for PL-connected NVMe bitstreams. */
+    uint64_t pl_status;             // 0x68 - read-only setup/readiness status
+    uint64_t pl_nsid;               // 0x70 - read-only discovered namespace ID
+    uint64_t pl_lba_bytes;          // 0x78 - read-only discovered LBA size
+    uint64_t pl_nsze;               // 0x80 - read-only discovered namespace size
+    uint64_t pl_mdts_cap;           // 0x88 - read-only MDTS exponent and CAP.MPSMIN
 } __packed;
 
 

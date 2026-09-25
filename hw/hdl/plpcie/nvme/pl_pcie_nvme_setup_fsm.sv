@@ -76,7 +76,9 @@ module pl_pcie_nvme_setup_fsm #(
 
     // Connect directly to pl_pcie_nvme_enum_top.enum_done.
     input  wire                         enum_done,
-
+    // Same-clock rising edge requests another read-only snapshot after setup.
+    // Requests while a snapshot is active are ignored.
+    input  wire                         health_snapshot_request,
 
     // Abstract single-transaction endpoint-MMIO interface.  The standalone
     // wrapper connects this to pl_pcie_nvme_axi4_single_master_64.
@@ -135,6 +137,43 @@ module pl_pcie_nvme_setup_fsm #(
     output logic [7:0]                  discovered_lbads,
     output logic [15:0]                 discovered_metadata_bytes,
     output logic [31:0]                 discovered_lba_bytes,
+
+    // Optional diagnostics run only AFTER queues_ready/setup_done. Neither
+    // unsupported commands nor diagnostic transport faults invalidate setup.
+    output logic                        health_snapshot_busy,
+    output logic                        health_snapshot_done,
+    output logic [31:0]                 health_snapshot_count,
+    // Bit/16-bit lane order: Identify Controller, FID 02, FID 0C, FID 10, SMART.
+    // Status is CQE status >> 1 (phase removed); ffff means no completion.
+    output logic [4:0]                  health_valid,
+    output logic [79:0]                 health_command_status,
+    output logic [7:0]                  health_error_code,
+    output logic [63:0]                 health_firmware_revision,
+    output logic [7:0]                  health_npss,
+    output logic [7:0]                  health_apsta,
+    // Low to high 16-bit lanes: WCTEMP, CCTEMP, HCTMA, MNTMT, MXTMT.
+    output logic [79:0]                 health_thermal_caps,
+    // Raw Get Features completion DW0. Power state is [4:0], APSTE is [0],
+    // HCTM has TMT1 in [31:16] and TMT2 in [15:0]. Temperatures are Kelvin.
+    output logic [31:0]                 health_power_management,
+    output logic [31:0]                 health_apst,
+    output logic [31:0]                 health_hctm,
+    // PSD summary: [31:0] = descriptor bytes 0..3 (MP/reserved/flags),
+    // [63:32] = bytes 12..15 (RRT/RRL/RWT/RWL). Preserve MP scale in flags.
+    output logic [63:0]                 health_ps0_summary,
+    output logic [63:0]                 health_current_ps_summary,
+    output logic                        health_current_ps_valid,
+    // SMART bytes 0..7: critical warning, composite temperature, spare,
+    // spare threshold, percentage used, endurance warning, reserved.
+    output logic [63:0]                 health_smart_status,
+    output logic [127:0]                health_media_errors,
+    output logic [127:0]                health_error_log_entries,
+    // SMART bytes 192..199: warning/critical temperature time (minutes).
+    output logic [63:0]                 health_temperature_time,
+    output logic [127:0]                health_temperature_sensors,
+    // Low/high DW: TMT1/TMT2 transitions and total time (seconds).
+    output logic [63:0]                 health_thermal_transitions,
+    output logic [63:0]                 health_thermal_time,
 
     // Stable, compact ILA probes.
     output wire [7:0]                   state_dbg,
@@ -207,7 +246,12 @@ module pl_pcie_nvme_setup_fsm #(
         CMD_IDENTIFY_NS      = 4'h3,
         CMD_SET_NUM_QUEUES   = 4'h4,
         CMD_CREATE_IO_CQ     = 4'h5,
-        CMD_CREATE_IO_SQ     = 4'h6
+        CMD_CREATE_IO_SQ     = 4'h6,
+        CMD_HEALTH_CTRL      = 4'h7,
+        CMD_HEALTH_POWER     = 4'h8,
+        CMD_HEALTH_APST      = 4'h9,
+        CMD_HEALTH_HCTM      = 4'ha,
+        CMD_HEALTH_SMART     = 4'hb
     } command_t;
 
     // Explicit encodings reserve groups for controller setup and Admin queue
@@ -243,6 +287,8 @@ module pl_pcie_nvme_setup_fsm #(
         ST_CQ_CHECK              = 8'h47,
         ST_CQ_ACK                = 8'h48,
         ST_COMMAND_COMPLETE      = 8'h49,
+        ST_CQ_RESULT_REQ         = 8'h4a,
+        ST_CQ_RESULT_WAIT        = 8'h4b,
 
         // Mandatory discovery parsing.  Keeping these states in a separate
         // range makes the non-destructive phase obvious in an ILA trace.
@@ -270,13 +316,22 @@ module pl_pcie_nvme_setup_fsm #(
         ST_DISC_LBAF_WAIT         = 8'h99,
         ST_DISC_NS_CHECK          = 8'h9a,
 
+        ST_HEALTH_START           = 8'ha0,
+        ST_HEALTH_CTRL_REQ        = 8'ha1,
+        ST_HEALTH_CTRL_WAIT       = 8'ha2,
+        ST_HEALTH_PS_REQ          = 8'ha3,
+        ST_HEALTH_PS_WAIT         = 8'ha4,
+        ST_HEALTH_SMART_REQ       = 8'ha5,
+        ST_HEALTH_SMART_WAIT      = 8'ha6,
+        ST_HEALTH_FINISH          = 8'ha7,
+
         ST_MMIO_REQ               = 8'hf0,
         ST_MMIO_RSP               = 8'hf1,
         ST_DONE                   = 8'hfe,
         ST_ERROR                  = 8'hff
     } state_t;
 
-    (* MARK_DEBUG = "TRUE" *) state_t state;
+    state_t state;
     state_t mmio_return_state;
 
     command_t pending_command;
@@ -297,6 +352,11 @@ module pl_pcie_nvme_setup_fsm #(
     logic [31:0] cq_poll_count;
     logic        started_latch;
     logic        queues_ready_latch;
+    logic        health_request_d;
+    logic [3:0]  health_word_index;
+    wire health_command = (pending_command >= CMD_HEALTH_CTRL) &&
+                          (pending_command <= CMD_HEALTH_SMART);
+    wire [3:0] health_command_index = pending_command - CMD_HEALTH_CTRL;
 
     logic [8:0]  namespace_list_word_index;
     logic [63:0] namespace_list_read_data;
@@ -350,9 +410,9 @@ module pl_pcie_nvme_setup_fsm #(
     assign setup_started       = started_latch;
     assign setup_busy          = (state != ST_IDLE) &&
                                  (state != ST_DONE) &&
-                                 (state != ST_ERROR);
+                                 (state != ST_ERROR) && !queues_ready_latch;
     assign queues_ready        = queues_ready_latch;
-    assign setup_done          = (state == ST_DONE);
+    assign setup_done          = queues_ready_latch;
     assign setup_error         = (state == ST_ERROR);
     assign state_dbg           = state;
 
@@ -369,7 +429,12 @@ module pl_pcie_nvme_setup_fsm #(
             case (command)
                 CMD_IDENTIFY_CTRL,
                 CMD_IDENTIFY_LIST,
+                CMD_HEALTH_CTRL,
                 CMD_IDENTIFY_NS:    command_opcode = 8'h06;
+                CMD_HEALTH_POWER,
+                CMD_HEALTH_APST,
+                CMD_HEALTH_HCTM:     command_opcode = 8'h0a;
+                CMD_HEALTH_SMART:    command_opcode = 8'h02;
                 CMD_SET_NUM_QUEUES: command_opcode = 8'h09;
                 CMD_CREATE_IO_CQ:   command_opcode = 8'h05;
                 CMD_CREATE_IO_SQ:   command_opcode = 8'h01;
@@ -383,6 +448,9 @@ module pl_pcie_nvme_setup_fsm #(
             case (command)
                 CMD_IDENTIFY_CTRL,
                 CMD_IDENTIFY_LIST,
+                CMD_HEALTH_CTRL,
+                CMD_HEALTH_APST,
+                CMD_HEALTH_SMART,
                 CMD_IDENTIFY_NS:
                     command_prp1 = DISCOVERY_PCIE_ADDR;
                 CMD_CREATE_IO_CQ:
@@ -412,13 +480,16 @@ module pl_pcie_nvme_setup_fsm #(
         begin
             dw0  = {cid, 8'h00, command_opcode(command)};
             dw1  = (command == CMD_IDENTIFY_NS) ? NVME_NSID : 32'd0;
+            if (command == CMD_HEALTH_SMART)
+                dw1 = 32'hffff_ffff; // Controller-wide SMART, not per-namespace.
             dw10 = 32'd0;
             dw11 = 32'd0;
             dw12 = 32'd0;
             prp1 = command_prp1(command);
 
             case (command)
-                CMD_IDENTIFY_CTRL: begin
+                CMD_IDENTIFY_CTRL,
+                CMD_HEALTH_CTRL: begin
                     dw10 = 32'd1; // CNS=01h: Identify Controller
                 end
                 CMD_IDENTIFY_LIST: begin
@@ -426,6 +497,13 @@ module pl_pcie_nvme_setup_fsm #(
                 end
                 CMD_IDENTIFY_NS: begin
                     dw10 = 32'd0; // CNS=00h: Identify Namespace
+                end
+                CMD_HEALTH_POWER: dw10 = 32'h02; // SEL=0: current values only.
+                CMD_HEALTH_APST:  dw10 = 32'h0c; // Also DMA-writes a 256-byte table.
+                CMD_HEALTH_HCTM:  dw10 = 32'h10;
+                CMD_HEALTH_SMART: begin
+                    // LID=02h, RAE=1, NUMD=127: retain events, read 512 bytes.
+                    dw10 = 32'h007f_8002;
                 end
                 CMD_SET_NUM_QUEUES: begin
                     dw10 = 32'd7; // FID=07h: Number of Queues
@@ -522,6 +600,23 @@ module pl_pcie_nvme_setup_fsm #(
         end
     endtask
 
+    // A failed diagnostic transport cannot safely be reused: a late CQE or
+    // DMA may still arrive. Stop diagnostics until reset, but keep I/O ready.
+    task automatic fail_transaction(input logic [7:0] reason);
+        begin
+            if (queues_ready_latch) begin
+                health_error_code    <= reason;
+                health_snapshot_busy <= 1'b0;
+                health_snapshot_done <= 1'b1;
+                health_snapshot_count<= health_snapshot_count + 1'b1;
+                state                <= ST_DONE;
+            end else begin
+                error_code <= reason;
+                state      <= ST_ERROR;
+            end
+        end
+    endtask
+
     // Local setup-FSM access to TDP-RAM port B.
     always_comb begin
         ram_en    = 1'b0;
@@ -547,7 +642,8 @@ module pl_pcie_nvme_setup_fsm #(
                 );
             end
 
-            ST_CQ_READ0_REQ: begin
+            ST_CQ_READ0_REQ,
+            ST_CQ_RESULT_REQ: begin
                 ram_en   = 1'b1;
                 ram_we   = 8'h00;
                 ram_addr = (ADMIN_CQ_RAM_OFFSET >> 3) +
@@ -625,6 +721,35 @@ module pl_pcie_nvme_setup_fsm #(
                            (discovered_lba_format_index >> 1);
             end
 
+            ST_HEALTH_CTRL_REQ: begin
+                ram_en = 1'b1;
+                case (health_word_index)
+                    4'd0: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 8);   // FR
+                    4'd1: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 32);  // NPSS
+                    4'd2: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 33);  // APSTA/temps
+                    4'd3: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 40);  // HCTMA/limits
+                    4'd4: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 256); // PSD0 bytes 0..7
+                    default: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 257);
+                endcase
+            end
+
+            ST_HEALTH_PS_REQ: begin
+                ram_en = 1'b1;
+                // Get Features FID 02 has no DMA payload, so Identify's PSDs
+                // are still intact. Read before APST/SMART reuse the page.
+                ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 256 +
+                           ({27'd0, health_power_management[4:0]} << 2) +
+                           {28'd0, health_word_index});
+            end
+
+            ST_HEALTH_SMART_REQ: begin
+                ram_en = 1'b1;
+                // First read bytes 0..7, then contiguous bytes 160..231.
+                ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) +
+                           ((health_word_index == 0) ? 0 :
+                            (19 + {28'd0, health_word_index})));
+            end
+
             default: begin
                 ram_en    = 1'b0;
                 ram_we    = 8'h00;
@@ -653,6 +778,31 @@ module pl_pcie_nvme_setup_fsm #(
             cq_poll_count            <= 32'd0;
             started_latch            <= 1'b0;
             queues_ready_latch       <= 1'b0;
+            health_request_d         <= 1'b0;
+            health_word_index        <= 4'd0;
+            health_snapshot_busy     <= 1'b0;
+            health_snapshot_done     <= 1'b0;
+            health_snapshot_count    <= 32'd0;
+            health_valid             <= 5'd0;
+            health_command_status    <= {80{1'b1}};
+            health_error_code        <= 8'd0;
+            health_firmware_revision <= 64'd0;
+            health_npss              <= 8'd0;
+            health_apsta             <= 8'd0;
+            health_thermal_caps      <= 80'd0;
+            health_power_management  <= 32'd0;
+            health_apst              <= 32'd0;
+            health_hctm              <= 32'd0;
+            health_ps0_summary       <= 64'd0;
+            health_current_ps_summary<= 64'd0;
+            health_current_ps_valid  <= 1'b0;
+            health_smart_status      <= 64'd0;
+            health_media_errors      <= 128'd0;
+            health_error_log_entries <= 128'd0;
+            health_temperature_time  <= 64'd0;
+            health_temperature_sensors <= 128'd0;
+            health_thermal_transitions <= 64'd0;
+            health_thermal_time      <= 64'd0;
             namespace_list_word_index<= 9'd0;
             namespace_list_read_data <= 64'd0;
             selected_lba_format      <= 32'd0;
@@ -697,6 +847,7 @@ module pl_pcie_nvme_setup_fsm #(
             submitted_command_count  <= 32'd0;
             allocated_io_queues      <= 32'd0;
         end else begin
+            health_request_d <= health_snapshot_request;
             // enum_done is latched by the enumeration FSM.  If it disappears
             // while setup is active, continuing to touch the endpoint is not
             // safe because BAR/BDF state may have been reset.
@@ -705,8 +856,7 @@ module pl_pcie_nvme_setup_fsm #(
                 (state != ST_DONE) &&
                 (state != ST_ERROR) &&
                 !enum_done) begin
-                error_code <= ERR_ENUM_LOST;
-                state      <= ST_ERROR;
+                fail_transaction(ERR_ENUM_LOST);
             end else begin
                 case (state)
                     ST_IDLE: begin
@@ -1070,19 +1220,24 @@ module pl_pcie_nvme_setup_fsm #(
                         // 64-bit RAM word.  A mismatched phase means empty.
                         if (cqe_word1[48] != expected_cq_phase) begin
                             if (cq_poll_count >= (CQ_LIMIT - 1)) begin
-                                error_code <= ERR_CQ_TIMEOUT;
-                                state      <= ST_ERROR;
+                                fail_transaction(ERR_CQ_TIMEOUT);
                             end else begin
                                 cq_poll_count <= cq_poll_count + 1'b1;
                                 state <= ST_CQ_READ0_REQ;
                             end
                         end else if (cqe_word1[47:32] != pending_cid) begin
                             last_completion_cid <= cqe_word1[47:32];
-                            error_code <= ERR_CQ_CID;
-                            state      <= ST_ERROR;
+                            fail_transaction(ERR_CQ_CID);
                         end else if (cqe_word1[31:16] != expected_sqid) begin
-                            error_code <= ERR_CQ_SQID;
-                            state      <= ST_ERROR;
+                            fail_transaction(ERR_CQ_SQID);
+                        end else if (health_command) begin
+                            last_completion_cid <= cqe_word1[47:32];
+                            last_completion_status <= {1'b0, cqe_word1[63:49]};
+                            health_command_status[health_command_index*16 +: 16] <=
+                                {1'b0, cqe_word1[63:49]};
+                            // Even an unsupported optional command must be
+                            // consumed and acknowledged before the next one.
+                            state <= ST_CQ_RESULT_REQ;
                         end else if (cqe_word1[63:49] != 15'd0) begin
                             last_completion_status <= {1'b0, cqe_word1[63:49]};
                             error_code <= ERR_CQ_STATUS;
@@ -1090,8 +1245,20 @@ module pl_pcie_nvme_setup_fsm #(
                         end else begin
                             last_completion_cid    <= cqe_word1[47:32];
                             last_completion_status <= 16'd0;
-                            state <= ST_CQ_ACK;
+                            state <= ST_CQ_RESULT_REQ;
                         end
+                    end
+
+                    ST_CQ_RESULT_REQ:
+                        state <= ST_CQ_RESULT_WAIT;
+
+                    ST_CQ_RESULT_WAIT: begin
+                        // A completion may arrive between the initial DW0
+                        // and phase reads. Re-read DW0 only after ownership,
+                        // CID and SQID are validated, before acknowledging.
+                        cqe_word0 <= ram_rdata;
+                        last_cqe <= {cqe_word1, ram_rdata};
+                        state <= ST_CQ_ACK;
                     end
 
                     ST_CQ_ACK: begin
@@ -1137,6 +1304,45 @@ module pl_pcie_nvme_setup_fsm #(
                                 queues_ready_latch <= 1'b1;
                                 state <= ST_DONE;
                             end
+                            CMD_HEALTH_CTRL: begin
+                                health_word_index <= 4'd0;
+                                if (cqe_word1[63:49] == 0)
+                                    state <= ST_HEALTH_CTRL_REQ;
+                                else
+                                    prepare_command(CMD_HEALTH_POWER);
+                            end
+                            CMD_HEALTH_POWER: begin
+                                if (cqe_word1[63:49] == 0) begin
+                                    health_valid[1] <= 1'b1;
+                                    health_power_management <= cqe_word0[31:0];
+                                    health_word_index <= 4'd0;
+                                    if (health_valid[0] &&
+                                        ({3'd0, cqe_word0[4:0]} <= health_npss))
+                                        state <= ST_HEALTH_PS_REQ;
+                                    else
+                                        prepare_command(CMD_HEALTH_APST);
+                                end else
+                                    prepare_command(CMD_HEALTH_APST);
+                            end
+                            CMD_HEALTH_APST: begin
+                                if (cqe_word1[63:49] == 0) begin
+                                    health_valid[2] <= 1'b1;
+                                    health_apst <= cqe_word0[31:0];
+                                end
+                                prepare_command(CMD_HEALTH_HCTM);
+                            end
+                            CMD_HEALTH_HCTM: begin
+                                if (cqe_word1[63:49] == 0) begin
+                                    health_valid[3] <= 1'b1;
+                                    health_hctm <= cqe_word0[31:0];
+                                end
+                                prepare_command(CMD_HEALTH_SMART);
+                            end
+                            CMD_HEALTH_SMART: begin
+                                health_word_index <= 4'd0;
+                                state <= (cqe_word1[63:49] == 0) ? ST_HEALTH_SMART_REQ :
+                                                                 ST_HEALTH_FINISH;
+                            end
                             default: begin
                                 error_code <= ERR_CQ_STATUS;
                                 state <= ST_ERROR;
@@ -1156,11 +1362,9 @@ module pl_pcie_nvme_setup_fsm #(
                         if (mmio_rsp_valid) begin
                             last_mmio_rdata <= mmio_rsp_rdata;
                             if (mmio_rsp_timeout) begin
-                                error_code <= ERR_MMIO_TIMEOUT;
-                                state      <= ST_ERROR;
+                                fail_transaction(ERR_MMIO_TIMEOUT);
                             end else if (mmio_rsp_resp != AXI_OKAY) begin
-                                error_code <= ERR_MMIO_AXI;
-                                state      <= ST_ERROR;
+                                fail_transaction(ERR_MMIO_AXI);
                             end else begin
                                 mmio_read32_data <=
                                     mmio_rsp_rdata >>
@@ -1171,7 +1375,89 @@ module pl_pcie_nvme_setup_fsm #(
                     end
 
                     ST_DONE: begin
-                        // Latched until reset for reliable ILA use.
+                        // Initial snapshot is automatic; later ones need a
+                        // VIO rising edge. Never reset or recreate queues.
+                        if (enum_done && (health_error_code == 0) &&
+                            (!health_snapshot_done ||
+                             (health_snapshot_request && !health_request_d)))
+                            state <= ST_HEALTH_START;
+                    end
+
+                    ST_HEALTH_START: begin
+                        health_snapshot_busy <= 1'b1;
+                        health_snapshot_done <= 1'b0;
+                        health_valid <= 5'd0;
+                        health_command_status <= {80{1'b1}};
+                        health_current_ps_valid <= 1'b0;
+                        // Payload registers retain the previous snapshot
+                        // until replaced; only health_valid qualifies them.
+                        prepare_command(CMD_HEALTH_CTRL);
+                    end
+
+                    ST_HEALTH_CTRL_REQ: state <= ST_HEALTH_CTRL_WAIT;
+                    ST_HEALTH_CTRL_WAIT: begin
+                        case (health_word_index)
+                            4'd0: health_firmware_revision <= ram_rdata;
+                            4'd1: health_npss <= ram_rdata[63:56];
+                            4'd2: begin
+                                health_apsta <= ram_rdata[15:8];
+                                health_thermal_caps[31:0] <= ram_rdata[47:16];
+                            end
+                            4'd3: health_thermal_caps[79:32] <= ram_rdata[63:16];
+                            4'd4: health_ps0_summary[31:0] <= ram_rdata[31:0];
+                            default: health_ps0_summary[63:32] <= ram_rdata[63:32];
+                        endcase
+                        if (health_word_index == 4'd5) begin
+                            health_valid[0] <= 1'b1;
+                            prepare_command(CMD_HEALTH_POWER);
+                        end else begin
+                            health_word_index <= health_word_index + 1'b1;
+                            state <= ST_HEALTH_CTRL_REQ;
+                        end
+                    end
+
+                    ST_HEALTH_PS_REQ: state <= ST_HEALTH_PS_WAIT;
+                    ST_HEALTH_PS_WAIT: begin
+                        if (health_word_index == 0) begin
+                            health_current_ps_summary[31:0] <= ram_rdata[31:0];
+                            health_word_index <= 4'd1;
+                            state <= ST_HEALTH_PS_REQ;
+                        end else begin
+                            health_current_ps_summary[63:32] <= ram_rdata[63:32];
+                            health_current_ps_valid <= 1'b1;
+                            prepare_command(CMD_HEALTH_APST);
+                        end
+                    end
+
+                    ST_HEALTH_SMART_REQ: state <= ST_HEALTH_SMART_WAIT;
+                    ST_HEALTH_SMART_WAIT: begin
+                        case (health_word_index)
+                            4'd0: health_smart_status <= ram_rdata;
+                            4'd1: health_media_errors[63:0] <= ram_rdata;
+                            4'd2: health_media_errors[127:64] <= ram_rdata;
+                            4'd3: health_error_log_entries[63:0] <= ram_rdata;
+                            4'd4: health_error_log_entries[127:64] <= ram_rdata;
+                            4'd5: health_temperature_time <= ram_rdata;
+                            4'd6: health_temperature_sensors[63:0] <= ram_rdata;
+                            4'd7: health_temperature_sensors[127:64] <= ram_rdata;
+                            4'd8: health_thermal_transitions <= ram_rdata;
+                            4'd9: health_thermal_time <= ram_rdata;
+                            default: ;
+                        endcase
+                        if (health_word_index == 4'd9) begin
+                            health_valid[4] <= 1'b1;
+                            state <= ST_HEALTH_FINISH;
+                        end else begin
+                            health_word_index <= health_word_index + 1'b1;
+                            state <= ST_HEALTH_SMART_REQ;
+                        end
+                    end
+
+                    ST_HEALTH_FINISH: begin
+                        health_snapshot_busy <= 1'b0;
+                        health_snapshot_done <= 1'b1;
+                        health_snapshot_count <= health_snapshot_count + 1'b1;
+                        state <= ST_DONE;
                     end
 
                     ST_ERROR: begin

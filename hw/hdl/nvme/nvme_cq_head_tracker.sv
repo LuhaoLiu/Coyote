@@ -43,12 +43,15 @@ module nvme_cq_head_tracker #(
 )(
     input  logic        aclk,
     input  logic        aresetn,
+    input  logic        queue_reset,
+    input  logic [N_NVME_BITS-1:0] queue_reset_dev,
+    output logic        reset_ready,
 
     // Pulse on each CQE handshake
     input  logic                    cqe_valid,
     input  logic [N_NVME_BITS-1:0]  cqe_dev_id,    // which device's CQE
 
-    // Output: CQ head update to info_table
+    // Output: acknowledged CQ head observation (not SQ admission credit)
     metaIntf.m          m_cq_head_update,   // cq_head_update_t
 
     // Output: CQ Doorbell DMA
@@ -65,8 +68,10 @@ module nvme_cq_head_tracker #(
     localparam logic [63:0] CQ_DB_OFFSET = 64'd4;
 
     // Per-device state
-    logic [NVME_QUEUE_BITS-1:0] internal_head [N_NVME];
-    logic [NVME_QUEUE_BITS-1:0] external_head [N_NVME];
+    // Extra wrap bit distinguishes a full CQ of consumed entries from none.
+    logic [NVME_QUEUE_BITS:0] internal_head [N_NVME];
+    logic [NVME_QUEUE_BITS:0] external_head [N_NVME];
+    logic [NVME_QUEUE_BITS:0] snapshot_head;
     logic [TIMER_BITS-1:0]      timer         [N_NVME];
 
     // FSM
@@ -83,12 +88,8 @@ module nvme_cq_head_tracker #(
     // Pending count for scanned device
     logic [NVME_QUEUE_BITS:0] pending_count;
 
-    always_comb begin
-        if (internal_head[scan_dev_C] >= external_head[scan_dev_C])
-            pending_count = internal_head[scan_dev_C] - external_head[scan_dev_C];
-        else
-            pending_count = CQ_DEPTH - external_head[scan_dev_C] + internal_head[scan_dev_C];
-    end
+    assign pending_count = internal_head[scan_dev_C] - external_head[scan_dev_C];
+    assign reset_ready = (state_C == ST_SCAN);
 
     logic batch_trigger;
     logic timeout_trigger;
@@ -102,6 +103,18 @@ module nvme_cq_head_tracker #(
     logic [63:0] cq_doorbell_addr;
     assign cq_doorbell_addr = sq_db_addr_tbl[scan_dev_C] + CQ_DB_OFFSET;
 
+    // State-only handshakes and frozen payloads are independent of READY.
+    assign m_cq_dma_req.valid = (state_C == ST_SEND_DMA_REQ);
+    assign m_cq_dma_req.req.paddr = cq_doorbell_addr;
+    assign m_cq_dma_req.req.len = 4;
+    assign m_cq_dma_req.req.last = 1'b1;
+    assign m_cq_dma_req.req.rsrvd = '0;
+    assign m_cq_dma_data.tvalid = (state_C == ST_SEND_DMA_DATA);
+    assign m_cq_dma_data.tdata = {{(AXI_DATA_BITS-NVME_QUEUE_BITS){1'b0}},
+                                snapshot_head[NVME_QUEUE_BITS-1:0]};
+    assign m_cq_dma_data.tkeep = {{(AXI_DATA_BITS/8 - 4){1'b0}}, 4'hF};
+    assign m_cq_dma_data.tlast = 1'b1;
+
     // Combinational logic
     always_comb begin
         state_N    = state_C;
@@ -109,14 +122,6 @@ module nvme_cq_head_tracker #(
 
         m_cq_head_update.valid = 1'b0;
         m_cq_head_update.data  = '0;
-
-        m_cq_dma_req.valid = 1'b0;
-        m_cq_dma_req.req   = '0;
-
-        m_cq_dma_data.tvalid = 1'b0;
-        m_cq_dma_data.tdata  = '0;
-        m_cq_dma_data.tkeep  = '0;
-        m_cq_dma_data.tlast  = 1'b0;
 
         case (state_C)
 
@@ -130,22 +135,11 @@ module nvme_cq_head_tracker #(
             end
 
             ST_SEND_DMA_REQ: begin
-                m_cq_dma_req.valid     = 1'b1;
-                m_cq_dma_req.req.paddr = cq_doorbell_addr;
-                m_cq_dma_req.req.len   = 4;
-                m_cq_dma_req.req.last  = 1'b1;
-                m_cq_dma_req.req.rsrvd = '0;
-
                 if (m_cq_dma_req.ready)
                     state_N = ST_SEND_DMA_DATA;
             end
 
             ST_SEND_DMA_DATA: begin
-                m_cq_dma_data.tvalid = 1'b1;
-                m_cq_dma_data.tdata  = {'0, {(32-NVME_QUEUE_BITS){1'b0}}, internal_head[scan_dev_C]};
-                m_cq_dma_data.tkeep  = {{(AXI_DATA_BITS/8 - 4){1'b0}}, 4'hF};
-                m_cq_dma_data.tlast  = 1'b1;
-
                 if (m_cq_dma_data.tready)
                     state_N = ST_UPDATE_TABLE;
             end
@@ -153,7 +147,7 @@ module nvme_cq_head_tracker #(
             ST_UPDATE_TABLE: begin
                 m_cq_head_update.valid        = 1'b1;
                 m_cq_head_update.data.dev_id  = scan_dev_C;
-                m_cq_head_update.data.cq_head = external_head[scan_dev_C];
+                m_cq_head_update.data.cq_head = external_head[scan_dev_C][NVME_QUEUE_BITS-1:0];
 
                 if (m_cq_head_update.ready) begin
                     // Move to next device after servicing
@@ -172,6 +166,7 @@ module nvme_cq_head_tracker #(
         if (!aresetn) begin
             state_C    <= ST_SCAN;
             scan_dev_C <= '0;
+            snapshot_head <= '0;
             for (int d = 0; d < N_NVME; d++) begin
                 internal_head[d] <= '0;
                 external_head[d] <= '0;
@@ -182,12 +177,15 @@ module nvme_cq_head_tracker #(
             state_C    <= state_N;
             scan_dev_C <= scan_dev_N;
 
+            // Freeze data before VALID. For a full-ring backlog, acknowledge
+            // depth-1 then the remainder, avoiding an unchanged doorbell value.
+            if (state_C == ST_SCAN && should_send_dma)
+                snapshot_head <= external_head[scan_dev_C] +
+                    ((pending_count >= CQ_DEPTH) ? (NVME_QUEUE_BITS+1)'(CQ_DEPTH-1) : pending_count);
+
             // Advance internal_head on each CQE
             if (cqe_valid) begin
-                if (internal_head[cqe_dev_id] == CQ_DEPTH - 1)
-                    internal_head[cqe_dev_id] <= '0;
-                else
-                    internal_head[cqe_dev_id] <= internal_head[cqe_dev_id] + 1'b1;
+                internal_head[cqe_dev_id] <= internal_head[cqe_dev_id] + 1'b1;
             end
 
             // Update timers for all devices
@@ -202,8 +200,16 @@ module nvme_cq_head_tracker #(
 
             // On DMA data sent: snapshot external_head, reset timer
             if (state_C == ST_SEND_DMA_DATA && m_cq_dma_data.tvalid && m_cq_dma_data.tready) begin
-                external_head[scan_dev_C] <= internal_head[scan_dev_C];
+                external_head[scan_dev_C] <= snapshot_head;
                 timer[scan_dev_C]         <= '0;
+            end
+
+            // Queue recreation is accepted only at an idle transaction boundary.
+            if (queue_reset) begin
+                internal_head[queue_reset_dev] <= '0;
+                external_head[queue_reset_dev] <= '0;
+                timer[queue_reset_dev] <= '0;
+                if (scan_dev_C == queue_reset_dev) state_C <= ST_SCAN;
             end
         end
     end

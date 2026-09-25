@@ -198,46 +198,44 @@ module pl_pcie_nvme_enum_top #(
     assign m_axil_ecam_aruser = 13'd0;
 
     // Abstract ECAM command/response.
-    (* MARK_DEBUG = "TRUE" *) wire cfg_cmd_valid_i;
-    (* MARK_DEBUG = "TRUE" *) wire cfg_cmd_ready_i;
+    wire cfg_cmd_valid_i;
+    wire cfg_cmd_ready_i;
     wire cfg_cmd_write_i;
-    (* MARK_DEBUG = "TRUE" *)
-        wire [CFG_ADDR_WIDTH-1:0] cfg_cmd_addr_i;
+    wire [CFG_ADDR_WIDTH-1:0] cfg_cmd_addr_i;
     wire [31:0] cfg_cmd_wdata_i;
     wire [3:0] cfg_cmd_wstrb_i;
-    (* MARK_DEBUG = "TRUE" *) wire cfg_rsp_valid_i;
+    wire cfg_rsp_valid_i;
     wire cfg_rsp_ready_i;
-    (* MARK_DEBUG = "TRUE" *) wire [31:0] cfg_rsp_rdata_i;
-    (* MARK_DEBUG = "TRUE" *) wire [1:0] cfg_rsp_resp_i;
-    (* MARK_DEBUG = "TRUE" *) wire cfg_rsp_timeout_i;
+    wire [31:0] cfg_rsp_rdata_i;
+    wire [1:0] cfg_rsp_resp_i;
+    wire cfg_rsp_timeout_i;
 
     // Abstract bridge-CSR command/response.
-    (* MARK_DEBUG = "TRUE" *) wire csr_cmd_valid_i;
-    (* MARK_DEBUG = "TRUE" *) wire csr_cmd_ready_i;
+    wire csr_cmd_valid_i;
+    wire csr_cmd_ready_i;
     wire csr_cmd_write_i;
-    (* MARK_DEBUG = "TRUE" *) wire [31:0] csr_cmd_addr_i;
-    (* MARK_DEBUG = "TRUE" *) wire [31:0] csr_cmd_wdata_i;
+    wire [31:0] csr_cmd_addr_i;
+    wire [31:0] csr_cmd_wdata_i;
     wire [3:0] csr_cmd_wstrb_i;
-    (* MARK_DEBUG = "TRUE" *) wire csr_rsp_valid_i;
+    wire csr_rsp_valid_i;
     wire csr_rsp_ready_i;
-    (* MARK_DEBUG = "TRUE" *) wire [31:0] csr_rsp_rdata_i;
-    (* MARK_DEBUG = "TRUE" *) wire [1:0] csr_rsp_resp_i;
-    (* MARK_DEBUG = "TRUE" *) wire csr_rsp_timeout_i;
+    wire [31:0] csr_rsp_rdata_i;
+    wire [1:0] csr_rsp_resp_i;
+    wire csr_rsp_timeout_i;
 
     // Abstract endpoint-MMIO command/response.
-    (* MARK_DEBUG = "TRUE" *) wire mmio_cmd_valid_i;
-    (* MARK_DEBUG = "TRUE" *) wire mmio_cmd_ready_i;
+    wire mmio_cmd_valid_i;
+    wire mmio_cmd_ready_i;
     wire mmio_cmd_write_i;
-    (* MARK_DEBUG = "TRUE" *)
-        wire [MMIO_ADDR_WIDTH-1:0] mmio_cmd_addr_i;
+    wire [MMIO_ADDR_WIDTH-1:0] mmio_cmd_addr_i;
     wire [63:0] mmio_cmd_wdata_i;
     wire [7:0] mmio_cmd_wstrb_i;
     wire [2:0] mmio_cmd_size_i;
-    (* MARK_DEBUG = "TRUE" *) wire mmio_rsp_valid_i;
+    wire mmio_rsp_valid_i;
     wire mmio_rsp_ready_i;
-    (* MARK_DEBUG = "TRUE" *) wire [63:0] mmio_rsp_rdata_i;
-    (* MARK_DEBUG = "TRUE" *) wire [1:0] mmio_rsp_resp_i;
-    (* MARK_DEBUG = "TRUE" *) wire mmio_rsp_timeout_i;
+    wire [63:0] mmio_rsp_rdata_i;
+    wire [1:0] mmio_rsp_resp_i;
+    wire mmio_rsp_timeout_i;
 
     pl_pcie_nvme_enum_fsm #(
         .CFG_ADDR_WIDTH(CFG_ADDR_WIDTH),

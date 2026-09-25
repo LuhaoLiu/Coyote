@@ -99,7 +99,7 @@ module pl_pcie_nvme_axi4_ram_slave #(
         ST_READ_SEND   = 4'h6
     } state_t;
 
-    (* MARK_DEBUG = "TRUE" *) state_t state;
+    state_t state;
 
     logic [ID_WIDTH-1:0]   transaction_id;
     logic [ADDR_WIDTH-1:0] current_addr;

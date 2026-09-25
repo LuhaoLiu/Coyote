@@ -79,33 +79,44 @@
 /* Controller enable / disable poll timeout, in milliseconds */
 #define NVME_CTRL_TIMEOUT_MS    5000
 
+/* PL-NVMe discovery/status register fields (nvme_cnfg_slave offsets 0x68+). */
+#define PL_NVME_SETUP_TIMEOUT_MS        30000
+#define PL_NVME_STATUS_READY            BIT_ULL(0)
+#define PL_NVME_STATUS_DONE             BIT_ULL(1)
+#define PL_NVME_STATUS_ERROR            BIT_ULL(2)
+#define PL_NVME_STATUS_NAMESPACE_VALID  BIT_ULL(3)
+#define PL_NVME_STATUS_TARGET_FOUND     BIT_ULL(4)
+#define PL_NVME_STATUS_ERROR_CODE_SHIFT 8
+#define PL_NVME_STATUS_ERROR_CODE_MASK  GENMASK_ULL(15, 8)
+#define PL_NVME_MDTS_MASK               GENMASK_ULL(7, 0)
+#define PL_NVME_MPSMIN_SHIFT            8
+#define PL_NVME_MPSMIN_MASK             GENMASK_ULL(11, 8)
+
 /*
  * design_plnvme owns PCIe enumeration, controller initialization, and I/O
- * queue creation, so Linux cannot discover these values through the PCI/NVMe
- * APIs. The namespace values below were captured from design_plnvme's Identify
- * data. The BAR address, queue ID, and doorbell stride are part of the current
- * single-controller BD contract.
+ * queue creation, so Linux cannot use the PCI/NVMe APIs for this topology. The
+ * namespace geometry and MDTS are discovered by the BD and read through
+ * nvme_cnfg_slave. Only the fixed queue/BAR topology remains here.
  *
  * This remains deliberately PL-only: host-connected NVMe continues to discover
  * all of these values from the device at run time.
  */
-struct pl_nvme_static_params {
+struct pl_nvme_topology_params {
     uint32_t dev_id;
-    uint32_t nsid;
-    uint32_t lba_size;
-    uint64_t nsze;
-    uint32_t mdts;
     uint64_t controller_bar_base;
     uint32_t doorbell_stride;
     uint16_t io_qid;
 };
 
-static const struct pl_nvme_static_params pl_nvme_params = {
+struct pl_nvme_discovery_params {
+    uint32_t nsid;
+    uint32_t lba_size;
+    uint64_t nsze;
+    uint32_t mdts;
+};
+
+static const struct pl_nvme_topology_params pl_nvme_topology = {
     .dev_id              = 0,
-    .nsid                = 1,
-    .lba_size            = 0x200U,         /* Identify Namespace: LBADS=9 */
-    .nsze                = 0x1bf1f72b0ULL, /* Identify Namespace: NSZE */
-    .mdts                = 0x400000U,      /* MDTS=10, MPSMIN=4 KiB */
     .controller_bar_base = 0x80000000ULL,
     .doorbell_stride     = 4,
     .io_qid              = 1,              /* queue 1, CAP.DSTRD=0 */
@@ -128,6 +139,8 @@ static int  nvme_create_io_queues(struct nvme_dev_ctx *ctx, uint16_t io_qid,
 static void nvme_write_device_info(volatile struct nvme_fpga_cnfg_regs *cnfg,
                                    struct nvme_device_state *ds,
                                    uint64_t fpga_bar_base);
+static int  pl_nvme_read_discovery(volatile struct nvme_fpga_cnfg_regs *cnfg,
+                                   struct pl_nvme_discovery_params *params);
 static void nvme_write_permission(volatile struct nvme_fpga_cnfg_regs *cnfg,
                                   uint32_t region_id, uint32_t dev_id,
                                   uint64_t lba_offset, uint64_t lba_count,
@@ -603,6 +616,85 @@ static void nvme_write_permission(volatile struct nvme_fpga_cnfg_regs *cnfg,
              region_id, dev_id, offset_bytes, lba_offset, size_bytes, lba_count);
 }
 
+/*
+ * Wait for the PL setup FSM and snapshot its read-only discovery registers.
+ * nvme_pl_status_pipeline keeps all fields aligned, and design_plnvme holds
+ * them once setup_done is asserted.
+ */
+static int pl_nvme_read_discovery(volatile struct nvme_fpga_cnfg_regs *cnfg,
+                                  struct pl_nvme_discovery_params *params) {
+    unsigned long deadline;
+    uint64_t status, value, mdts_cap;
+    uint32_t mdts_shift;
+
+    deadline = jiffies + msecs_to_jiffies(PL_NVME_SETUP_TIMEOUT_MS);
+    for (;;) {
+        status = readq((const volatile void __iomem *)&cnfg->pl_status);
+
+        if (status & PL_NVME_STATUS_ERROR) {
+            pr_err("PL NVMe setup failed (error code 0x%02llx)\n",
+                   (status & PL_NVME_STATUS_ERROR_CODE_MASK) >>
+                   PL_NVME_STATUS_ERROR_CODE_SHIFT);
+            return -EIO;
+        }
+        if (status & PL_NVME_STATUS_READY)
+            break;
+        if (time_after_eq(jiffies, deadline)) {
+            pr_err("PL NVMe setup did not become ready within %u ms (status=0x%llx)\n",
+                   PL_NVME_SETUP_TIMEOUT_MS, status);
+            return -ETIMEDOUT;
+        }
+        usleep_range(1000, 2000);
+    }
+
+    value = readq((const volatile void __iomem *)&cnfg->pl_nsid);
+    if (value > U32_MAX) {
+        pr_err("PL NVMe reported an invalid NSID value 0x%llx\n", value);
+        return -EINVAL;
+    }
+    params->nsid = (uint32_t)value;
+
+    value = readq((const volatile void __iomem *)&cnfg->pl_lba_bytes);
+    if (value > U32_MAX) {
+        pr_err("PL NVMe reported an invalid LBA byte count 0x%llx\n", value);
+        return -EINVAL;
+    }
+    params->lba_size = (uint32_t)value;
+    params->nsze = readq((const volatile void __iomem *)&cnfg->pl_nsze);
+
+    mdts_cap = readq((const volatile void __iomem *)&cnfg->pl_mdts_cap);
+    value = mdts_cap & PL_NVME_MDTS_MASK;
+    if (value == 0) {
+        params->mdts = 0; /* NVMe: zero means no MDTS limit is reported. */
+    } else {
+        mdts_shift = 12 +
+                     ((mdts_cap & PL_NVME_MPSMIN_MASK) >> PL_NVME_MPSMIN_SHIFT) +
+                     value;
+        if (mdts_shift >= 32) {
+            pr_err("PL NVMe MDTS does not fit the 32-bit driver ABI (shift=%u)\n",
+                   mdts_shift);
+            return -ERANGE;
+        }
+        params->mdts = 1U << mdts_shift;
+    }
+
+    /* Confirm setup remained valid while the multi-register snapshot was read. */
+    status = readq((const volatile void __iomem *)&cnfg->pl_status);
+    if (!(status & PL_NVME_STATUS_READY) || (status & PL_NVME_STATUS_ERROR)) {
+        pr_err("PL NVMe setup status changed while reading discovery data\n");
+        return -EAGAIN;
+    }
+
+    if (params->nsid == 0 || params->nsze == 0 || params->lba_size == 0 ||
+        (params->lba_size & (params->lba_size - 1)) != 0) {
+        pr_err("PL NVMe reported invalid geometry: nsid=%u lba_size=%u nsze=%llu\n",
+               params->nsid, params->lba_size, params->nsze);
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
 /* ============================================================
  * Manager lifecycle
  * ============================================================ */
@@ -695,21 +787,29 @@ static long vfpga_nvme_init_pl(struct vfpga_dev *device,
     struct nvme_manager *mgr = bd->nvme_mgr;
     volatile struct nvme_fpga_cnfg_regs *cnfg = bd->nvme_cnfg_regs;
     struct nvme_device_state *ds;
+    struct pl_nvme_discovery_params discovery;
     uint64_t lba_count, lba_offset;
     int region_id = device->id;
+    int ret;
 
-    /* The PL setup engine creates namespace 1 only. BDF is intentionally ignored. */
-    if (req->nsid != pl_nvme_params.nsid) {
-        pr_err("vfpga_nvme_init_pl: namespace %u is not configured (expected %u)\n",
-               req->nsid, pl_nvme_params.nsid);
-        req->result = -EINVAL;
-        return -EINVAL;
-    }
     if (!mgr || !cnfg) {
         req->result = -ENODEV;
         return -ENODEV;
     }
     if (region_id < 0 || region_id >= MAX_N_REGIONS) {
+        req->result = -EINVAL;
+        return -EINVAL;
+    }
+
+    /* BDF is intentionally ignored: the SSD is behind the PL root complex. */
+    ret = pl_nvme_read_discovery(cnfg, &discovery);
+    if (ret) {
+        req->result = ret;
+        return ret;
+    }
+    if (req->nsid != discovery.nsid) {
+        pr_err("vfpga_nvme_init_pl: namespace %u is not configured (discovered %u)\n",
+               req->nsid, discovery.nsid);
         req->result = -EINVAL;
         return -EINVAL;
     }
@@ -725,16 +825,16 @@ static long vfpga_nvme_init_pl(struct vfpga_dev *device,
         }
 
         memset(ds, 0, sizeof(*ds));
-        ds->dev_id          = pl_nvme_params.dev_id;
-        ds->nsid            = pl_nvme_params.nsid;
-        ds->io_qid          = pl_nvme_params.io_qid;
+        ds->dev_id          = pl_nvme_topology.dev_id;
+        ds->nsid            = discovery.nsid;
+        ds->io_qid          = pl_nvme_topology.io_qid;
         ds->next_free_lba   = 0;
-        ds->ctx.nsid        = pl_nvme_params.nsid;
-        ds->ctx.lba_size    = pl_nvme_params.lba_size;
-        ds->ctx.nsze        = pl_nvme_params.nsze;
-        ds->ctx.mdts        = pl_nvme_params.mdts;
-        ds->ctx.db_iova     = pl_nvme_params.controller_bar_base;
-        ds->ctx.db_stride   = pl_nvme_params.doorbell_stride;
+        ds->ctx.nsid        = discovery.nsid;
+        ds->ctx.lba_size    = discovery.lba_size;
+        ds->ctx.nsze        = discovery.nsze;
+        ds->ctx.mdts        = discovery.mdts;
+        ds->ctx.db_iova     = pl_nvme_topology.controller_bar_base;
+        ds->ctx.db_stride   = pl_nvme_topology.doorbell_stride;
         ds->ctx.initialized = true;
         mutex_init(&ds->ctx.lock);
 
@@ -748,22 +848,22 @@ static long vfpga_nvme_init_pl(struct vfpga_dev *device,
         ds->active = true;
         mgr->num_devices = 1;
 
-        /*
-         * setup_done is not exposed in the shell MMIO register map. nvme_top
-         * therefore remains the readiness authority and gates both request
-         * admission and doorbell writes until design_plnvme asserts it.
-         * TODO: Expose setup_error/status if software needs synchronous setup
-         * diagnostics rather than hardware back-pressure.
-         */
         dbg_info("registered PL NVMe dev_id=%u nsid=%u lba_size=%u nsze=%llu mdts=%u\n",
                  ds->dev_id, ds->ctx.nsid, ds->ctx.lba_size,
                  ds->ctx.nsze, ds->ctx.mdts);
     } else {
-        ds = &mgr->devices[pl_nvme_params.dev_id];
+        ds = &mgr->devices[pl_nvme_topology.dev_id];
         if (!ds->active) {
             mutex_unlock(&mgr->lock);
             req->result = -ENODEV;
             return -ENODEV;
+        }
+        if (ds->nsid != discovery.nsid || ds->ctx.lba_size != discovery.lba_size ||
+            ds->ctx.nsze != discovery.nsze || ds->ctx.mdts != discovery.mdts) {
+            pr_err("vfpga_nvme_init_pl: discovery data changed after registration\n");
+            mutex_unlock(&mgr->lock);
+            req->result = -ESTALE;
+            return -ESTALE;
         }
     }
 
@@ -837,18 +937,14 @@ static long vfpga_nvme_is_registered_pl(struct vfpga_dev *device,
     struct nvme_manager *mgr = device->bd_data->nvme_mgr;
     struct nvme_device_state *ds;
 
-    if (req->nsid != pl_nvme_params.nsid) {
-        req->result = -ENOENT;
-        return -ENOENT;
-    }
     if (!mgr) {
         req->result = -ENODEV;
         return -ENODEV;
     }
 
     mutex_lock(&mgr->lock);
-    ds = &mgr->devices[pl_nvme_params.dev_id];
-    if (mgr->num_devices == 0 || !ds->active) {
+    ds = &mgr->devices[pl_nvme_topology.dev_id];
+    if (mgr->num_devices == 0 || !ds->active || req->nsid != ds->nsid) {
         mutex_unlock(&mgr->lock);
         req->result = -ENOENT;
         return -ENOENT;

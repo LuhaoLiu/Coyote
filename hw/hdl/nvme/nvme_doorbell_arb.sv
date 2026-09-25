@@ -137,25 +137,27 @@ module nvme_doorbell_arb (
     end
     
     // Output muxing - DMA Request
+    // READY depends on the registered grant and downstream READY only.
+    // Keep it outside payload muxing to avoid combinational handshake feedback.
+    assign s_dma_req_0.ready = (state_C == ST_GRANT_0_REQ) && m_dma_req.ready;
+    assign s_dma_req_1.ready = (state_C == ST_GRANT_1_REQ) && m_dma_req.ready;
+    assign s_axis_0.tready = (state_C == ST_GRANT_0_DATA) && m_axis.tready;
+    assign s_axis_1.tready = (state_C == ST_GRANT_1_DATA) && m_axis.tready;
     
     always_comb begin
         // Default: tie-off
         m_dma_req.valid = 1'b0;
         m_dma_req.req = '0;
-        s_dma_req_0.ready = 1'b0;
-        s_dma_req_1.ready = 1'b0;
         
         case (state_C)
             ST_GRANT_0_REQ: begin
                 m_dma_req.valid = s_dma_req_0.valid;
                 m_dma_req.req = s_dma_req_0.req;
-                s_dma_req_0.ready = m_dma_req.ready;
             end
             
             ST_GRANT_1_REQ: begin
                 m_dma_req.valid = s_dma_req_1.valid;
                 m_dma_req.req = s_dma_req_1.req;
-                s_dma_req_1.ready = m_dma_req.ready;
             end
             
             default: begin
@@ -192,8 +194,6 @@ module nvme_doorbell_arb (
         m_axis.tdata = '0;
         m_axis.tkeep = '0;
         m_axis.tlast = 1'b0;
-        s_axis_0.tready = 1'b0;
-        s_axis_1.tready = 1'b0;
         
         case (state_C)
             ST_GRANT_0_DATA: begin
@@ -201,7 +201,6 @@ module nvme_doorbell_arb (
                 m_axis.tdata = s_axis_0.tdata;
                 m_axis.tkeep = s_axis_0.tkeep;
                 m_axis.tlast = s_axis_0.tlast;
-                s_axis_0.tready = m_axis.tready;
             end
             
             ST_GRANT_1_DATA: begin
@@ -209,7 +208,6 @@ module nvme_doorbell_arb (
                 m_axis.tdata = s_axis_1.tdata;
                 m_axis.tkeep = s_axis_1.tkeep;
                 m_axis.tlast = s_axis_1.tlast;
-                s_axis_1.tready = m_axis.tready;
             end
             
             default: begin

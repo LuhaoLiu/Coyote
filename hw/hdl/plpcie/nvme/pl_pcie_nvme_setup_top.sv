@@ -53,6 +53,7 @@ module pl_pcie_nvme_setup_top #(
     input  wire                         aclk,
     input  wire                         aresetn,
     input  wire                         enum_done,
+    input  wire                         health_snapshot_request,
 
     // Debug RAM read port for VIO(address/enable) + ILA(data).  FSM accesses
     // take priority; debug_ram_granted marks cycles in which this read won.
@@ -91,6 +92,31 @@ module pl_pcie_nvme_setup_top #(
     output wire [7:0]                   discovered_lbads,
     output wire [15:0]                  discovered_metadata_bytes,
     output wire [31:0]                  discovered_lba_bytes,
+
+    // Read-only post-setup diagnostics; see setup_fsm for probe field layouts.
+    output wire                         health_snapshot_busy,
+    output wire                         health_snapshot_done,
+    output wire [31:0]                 health_snapshot_count,
+    output wire [4:0]                  health_valid,
+    output wire [79:0]                 health_command_status,
+    output wire [7:0]                  health_error_code,
+    output wire [63:0]                 health_firmware_revision,
+    output wire [7:0]                  health_npss,
+    output wire [7:0]                  health_apsta,
+    output wire [79:0]                 health_thermal_caps,
+    output wire [31:0]                 health_power_management,
+    output wire [31:0]                 health_apst,
+    output wire [31:0]                 health_hctm,
+    output wire [63:0]                 health_ps0_summary,
+    output wire [63:0]                 health_current_ps_summary,
+    output wire                         health_current_ps_valid,
+    output wire [63:0]                 health_smart_status,
+    output wire [127:0]                health_media_errors,
+    output wire [127:0]                health_error_log_entries,
+    output wire [63:0]                 health_temperature_time,
+    output wire [127:0]                health_temperature_sensors,
+    output wire [63:0]                 health_thermal_transitions,
+    output wire [63:0]                 health_thermal_time,
     output wire [7:0]                   setup_state,
     output wire [7:0]                   setup_error_code,
     output wire [7:0]                   last_opcode,
@@ -198,18 +224,18 @@ module pl_pcie_nvme_setup_top #(
     wire internal_aresetn = aresetn;
 
     // FSM <-> existing single-transaction AXI master adapter.
-    (* MARK_DEBUG = "TRUE" *) wire mmio_cmd_valid_i;
+    wire mmio_cmd_valid_i;
     wire mmio_cmd_ready_i;
     wire mmio_cmd_write_i;
-    (* MARK_DEBUG = "TRUE" *) wire [MMIO_ADDR_WIDTH-1:0] mmio_cmd_addr_i;
+    wire [MMIO_ADDR_WIDTH-1:0] mmio_cmd_addr_i;
     wire [63:0] mmio_cmd_wdata_i;
     wire [7:0]  mmio_cmd_wstrb_i;
     wire [2:0]  mmio_cmd_size_i;
-    (* MARK_DEBUG = "TRUE" *) wire mmio_rsp_valid_i;
+    wire mmio_rsp_valid_i;
     wire mmio_rsp_ready_i;
-    (* MARK_DEBUG = "TRUE" *) wire [63:0] mmio_rsp_rdata_i;
-    (* MARK_DEBUG = "TRUE" *) wire [1:0] mmio_rsp_resp_i;
-    (* MARK_DEBUG = "TRUE" *) wire mmio_rsp_timeout_i;
+    wire [63:0] mmio_rsp_rdata_i;
+    wire [1:0] mmio_rsp_resp_i;
+    wire mmio_rsp_timeout_i;
 
     // TDP RAM port A is owned by the inbound AXI/DMA bridge.
     wire                       ram_a_en;
@@ -256,6 +282,7 @@ module pl_pcie_nvme_setup_top #(
         .clk(aclk),
         .resetn(aresetn),
         .enum_done(enum_done),
+        .health_snapshot_request(health_snapshot_request),
         .mmio_cmd_valid(mmio_cmd_valid_i),
         .mmio_cmd_ready(mmio_cmd_ready_i),
         .mmio_cmd_write(mmio_cmd_write_i),
@@ -302,6 +329,29 @@ module pl_pcie_nvme_setup_top #(
         .discovered_lbads(discovered_lbads),
         .discovered_metadata_bytes(discovered_metadata_bytes),
         .discovered_lba_bytes(discovered_lba_bytes),
+        .health_snapshot_busy(health_snapshot_busy),
+        .health_snapshot_done(health_snapshot_done),
+        .health_snapshot_count(health_snapshot_count),
+        .health_valid(health_valid),
+        .health_command_status(health_command_status),
+        .health_error_code(health_error_code),
+        .health_firmware_revision(health_firmware_revision),
+        .health_npss(health_npss),
+        .health_apsta(health_apsta),
+        .health_thermal_caps(health_thermal_caps),
+        .health_power_management(health_power_management),
+        .health_apst(health_apst),
+        .health_hctm(health_hctm),
+        .health_ps0_summary(health_ps0_summary),
+        .health_current_ps_summary(health_current_ps_summary),
+        .health_current_ps_valid(health_current_ps_valid),
+        .health_smart_status(health_smart_status),
+        .health_media_errors(health_media_errors),
+        .health_error_log_entries(health_error_log_entries),
+        .health_temperature_time(health_temperature_time),
+        .health_temperature_sensors(health_temperature_sensors),
+        .health_thermal_transitions(health_thermal_transitions),
+        .health_thermal_time(health_thermal_time),
         .state_dbg(setup_state),
         .error_code(setup_error_code),
         .last_opcode(last_opcode),

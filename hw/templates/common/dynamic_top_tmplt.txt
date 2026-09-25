@@ -104,9 +104,19 @@ module design_dynamic_top #(
     AXI4.s                                      s_axi_nvme_sq,
     AXI4.s                                      s_axi_nvme_cq,
 {% if cnfg.en_nvme_pl %}
-    // PL-connected NVMe doorbell MMIO path and initialization status.
+    // PL-connected NVMe doorbell MMIO path and pipelined discovery result.
     AXI4.m                                      m_axi_nvme_mmio,
+    input  logic                                nvme_pl_ready,
     input  logic                                nvme_setup_done,
+    input  logic                                nvme_setup_error,
+    input  logic [7:0]                          nvme_setup_error_code,
+    input  logic                                nvme_namespace_info_valid,
+    input  logic                                nvme_target_nsid_found,
+    input  logic [31:0]                         nvme_discovered_nsid,
+    input  logic [63:0]                         nvme_discovered_nsze,
+    input  logic [31:0]                         nvme_discovered_lba_bytes,
+    input  logic [7:0]                          nvme_discovered_mdts,
+    input  logic [3:0]                          nvme_mpsmin,
 {% endif %}
 {% endif %}
 {% if cnfg.en_host_networking %}
@@ -1184,7 +1194,17 @@ module design_dynamic_top #(
         .m_db_wr_data(nvme_db_wr_data),
 {% elif cnfg.en_nvme_pl %}
         .m_axi_nvme_mmio(m_axi_nvme_mmio),
+        .nvme_pl_ready(nvme_pl_ready),
         .nvme_setup_done(nvme_setup_done),
+        .nvme_setup_error(nvme_setup_error),
+        .nvme_setup_error_code(nvme_setup_error_code),
+        .nvme_namespace_info_valid(nvme_namespace_info_valid),
+        .nvme_target_nsid_found(nvme_target_nsid_found),
+        .nvme_discovered_nsid(nvme_discovered_nsid),
+        .nvme_discovered_nsze(nvme_discovered_nsze),
+        .nvme_discovered_lba_bytes(nvme_discovered_lba_bytes),
+        .nvme_discovered_mdts(nvme_discovered_mdts),
+        .nvme_mpsmin(nvme_mpsmin),
 {% endif %}
         .s_nvme_cnfg(s_axi_nvme_cnfg),
         .s_nvme_prp(s_axi_nvme_prp),
@@ -1205,7 +1225,7 @@ module design_dynamic_top #(
         .m_axis(axis_host_out_merged)
     );
 {% elif cnfg.en_nvme_pl %}
-    // nvme_top waits for nvme_setup_done, then writes SQ/CQ doorbells through
+    // nvme_top waits for the qualified PL-ready status, then writes SQ/CQ doorbells through
     // m_axi_nvme_mmio into design_plnvme's NVMe-endpoint BAR window. The fixed
     // queue/stride limitation is documented alongside the PL doorbell writer.
 {% endif %}

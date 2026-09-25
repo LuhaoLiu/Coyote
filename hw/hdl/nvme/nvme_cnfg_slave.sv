@@ -40,6 +40,21 @@ module nvme_cnfg_slave (
 
     AXI4L.s                         s_nvme_cnfg,
 
+`ifdef EN_NVME_PL
+    // Pipelined discovery result from design_plnvme (read-only over AXI-Lite)
+    input  logic                    pl_ready,
+    input  logic                    pl_setup_done,
+    input  logic                    pl_setup_error,
+    input  logic [7:0]              pl_setup_error_code,
+    input  logic                    pl_namespace_valid,
+    input  logic                    pl_target_found,
+    input  logic [31:0]             pl_nsid,
+    input  logic [63:0]             pl_nsze,
+    input  logic [31:0]             pl_lba_bytes,
+    input  logic [7:0]              pl_mdts,
+    input  logic [3:0]              pl_mpsmin,
+`endif
+
     metaIntf.m                      m_update_tbl,
     metaIntf.m                      m_perm_update,
 
@@ -47,7 +62,11 @@ module nvme_cnfg_slave (
     );
 
     // Constants
+`ifdef EN_NVME_PL
+    localparam integer N_REGS = 18;
+`else
     localparam integer N_REGS = 14;
+`endif
     localparam integer ADDR_MSB = $clog2(N_REGS);
     localparam integer ADDR_LSB = $clog2(AXIL_DATA_BITS/8);
     localparam integer AXI_ADDR_BITS = ADDR_LSB + ADDR_MSB;
@@ -68,6 +87,16 @@ module nvme_cnfg_slave (
     //   0x50  PERM_LBA_OFFSET
     //   0x58  PERM_LBA_SIZE
     //   0x60  PERM_VALID        (W1S trigger: bit0=write to perm table)
+`ifdef EN_NVME_PL
+    //   --- Read-only PL discovery registers ---
+    //   0x68  PL_STATUS         (bit0=ready, bit1=done, bit2=error,
+    //                            bit3=namespace valid, bit4=target NSID found,
+    //                            bits[15:8]=setup error code)
+    //   0x70  PL_NSID
+    //   0x78  PL_LBA_BYTES
+    //   0x80  PL_NSZE
+    //   0x88  PL_MDTS_CAP       (bits[7:0]=MDTS, bits[11:8]=CAP.MPSMIN)
+`endif
     localparam int unsigned FPGA_BAR_BASE_REG   = 0;
     localparam int unsigned RSVD0               = 1;
     localparam int unsigned DEV_ID              = 2;
@@ -81,6 +110,13 @@ module nvme_cnfg_slave (
     localparam int unsigned PERM_LBA_OFFSET     = 10;
     localparam int unsigned PERM_LBA_SIZE       = 11;
     localparam int unsigned PERM_VALID          = 12;
+`ifdef EN_NVME_PL
+    localparam int unsigned PL_STATUS           = 13;
+    localparam int unsigned PL_NSID             = 14;
+    localparam int unsigned PL_LBA_BYTES        = 15;
+    localparam int unsigned PL_NSZE             = 16;
+    localparam int unsigned PL_MDTS_CAP         = 17;
+`endif
 
     // Registers
     logic [AXI_ADDR_BITS-1:0] axi_awaddr;
@@ -193,10 +229,34 @@ module nvme_cnfg_slave (
         else begin
             axi_rdata <= '0;
             if (ctrl_reg_rden) begin
+`ifdef EN_NVME_PL
+                case (axi_araddr[ADDR_LSB+:ADDR_MSB])
+                    PL_STATUS: begin
+                        axi_rdata       <= '0;
+                        axi_rdata[0]    <= pl_ready;
+                        axi_rdata[1]    <= pl_setup_done;
+                        axi_rdata[2]    <= pl_setup_error;
+                        axi_rdata[3]    <= pl_namespace_valid;
+                        axi_rdata[4]    <= pl_target_found;
+                        axi_rdata[15:8] <= pl_setup_error_code;
+                    end
+                    PL_NSID:      axi_rdata <= {{(AXIL_DATA_BITS-32){1'b0}}, pl_nsid};
+                    PL_LBA_BYTES: axi_rdata <= {{(AXIL_DATA_BITS-32){1'b0}}, pl_lba_bytes};
+                    PL_NSZE:      axi_rdata <= pl_nsze;
+                    PL_MDTS_CAP: begin
+                        axi_rdata       <= '0;
+                        axi_rdata[7:0]  <= pl_mdts;
+                        axi_rdata[11:8] <= pl_mpsmin;
+                    end
+                    default: begin
+                        if (axi_araddr[ADDR_LSB+:ADDR_MSB] < N_REGS)
+                            axi_rdata <= ctrl_reg[axi_araddr[ADDR_LSB+:ADDR_MSB]];
+                    end
+                endcase
+`else
                 if (axi_araddr[ADDR_LSB+:ADDR_MSB] < N_REGS)
                     axi_rdata <= ctrl_reg[axi_araddr[ADDR_LSB+:ADDR_MSB]];
-                else
-                    axi_rdata <= '0;
+`endif
             end
         end
     end

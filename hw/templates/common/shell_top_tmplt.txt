@@ -455,9 +455,37 @@ module shell_top (
     {% if cnfg.en_nvme_pl %}
     // nvme_top doorbell MMIO master -> design_plnvme axi_nvme_mmio.
     AXI4 axi_nvme_mmio ();
-    // design_plnvme axi_nvme_host -> future AXI-to-Coyote-host-DMA adapter.
+    // design_plnvme host-memory master. It is connected only when the host
+    // streaming destination is enabled.
     AXI4 axi_nvme_host ();
+    {% if cnfg.en_strm %}
+    localparam integer N_PL_HOST_CLIENTS = 2;
+    AXI4S axis_pl_host_rd [N_PL_HOST_CLIENTS] ();
+    AXI4S axis_pl_host_wr [N_PL_HOST_CLIENTS] ();
+    dmaIntf dma_pl_host_rd [N_PL_HOST_CLIENTS] ();
+    dmaIntf dma_pl_host_wr [N_PL_HOST_CLIENTS] ();
+    {% endif %}
+    logic raw_nvme_setup_done;
+    logic raw_nvme_setup_error;
+    logic [7:0] raw_nvme_setup_error_code;
+    logic raw_nvme_namespace_info_valid;
+    logic raw_nvme_target_nsid_found;
+    logic [31:0] raw_nvme_discovered_nsid;
+    logic [63:0] raw_nvme_discovered_nsze;
+    logic [31:0] raw_nvme_discovered_lba_bytes;
+    logic [7:0] raw_nvme_discovered_mdts;
+    logic [63:0] raw_nvme_cap;
+    logic nvme_pl_ready;
     logic nvme_setup_done;
+    logic nvme_setup_error;
+    logic [7:0] nvme_setup_error_code;
+    logic nvme_namespace_info_valid;
+    logic nvme_target_nsid_found;
+    logic [31:0] nvme_discovered_nsid;
+    logic [63:0] nvme_discovered_nsze;
+    logic [31:0] nvme_discovered_lba_bytes;
+    logic [7:0] nvme_discovered_mdts;
+    logic [3:0] nvme_mpsmin;
     {% endif %}
 {% endif %}
 
@@ -523,7 +551,16 @@ module shell_top (
     design_plnvme inst_design_plnvme (
         .aclk                         (aclk),
         .aresetn                      (aresetn),
-        .nvme_setup_done              (nvme_setup_done),
+        .nvme_setup_done              (raw_nvme_setup_done),
+        .nvme_setup_error             (raw_nvme_setup_error),
+        .nvme_setup_error_code        (raw_nvme_setup_error_code),
+        .nvme_namespace_info_valid    (raw_nvme_namespace_info_valid),
+        .nvme_target_nsid_found       (raw_nvme_target_nsid_found),
+        .nvme_discovered_nsid         (raw_nvme_discovered_nsid),
+        .nvme_discovered_nsze         (raw_nvme_discovered_nsze),
+        .nvme_discovered_lba_bytes    (raw_nvme_discovered_lba_bytes),
+        .nvme_discovered_mdts         (raw_nvme_discovered_mdts),
+        .nvme_cap                     (raw_nvme_cap),
 
         .nvme_pcie_clk_clk_p          (pl_nvme_refclk_p),
         .nvme_pcie_clk_clk_n          (pl_nvme_refclk_n),
@@ -741,9 +778,55 @@ module shell_top (
         .axi_nvme_host_rready         (axi_nvme_host.rready)
     );
 
-    // TODO (PL NVMe): translate host physical addresses in the PRP builder and
-    // connect this master to Coyote's host-DMA path.
+    // Keep the BD discovery bundle aligned and register it before the long
+    // shell-to-dynamic route. CAP.MPSMIN is sufficient to convert the Identify
+    // Controller MDTS exponent into the byte count used by the driver ABI.
+    nvme_pl_status_pipeline #(
+        .PIPE_STAGES(3)
+    ) inst_nvme_pl_status_pipeline (
+        .aclk                  (aclk),
+        .aresetn               (aresetn),
+        .s_setup_done          (raw_nvme_setup_done),
+        .s_setup_error         (raw_nvme_setup_error),
+        .s_setup_error_code    (raw_nvme_setup_error_code),
+        .s_namespace_info_valid(raw_nvme_namespace_info_valid),
+        .s_target_nsid_found   (raw_nvme_target_nsid_found),
+        .s_nsid                (raw_nvme_discovered_nsid),
+        .s_nsze                (raw_nvme_discovered_nsze),
+        .s_lba_bytes           (raw_nvme_discovered_lba_bytes),
+        .s_mdts                (raw_nvme_discovered_mdts),
+        .s_mpsmin              (raw_nvme_cap[51:48]),
+        .m_ready               (nvme_pl_ready),
+        .m_setup_done          (nvme_setup_done),
+        .m_setup_error         (nvme_setup_error),
+        .m_setup_error_code    (nvme_setup_error_code),
+        .m_namespace_info_valid(nvme_namespace_info_valid),
+        .m_target_nsid_found   (nvme_target_nsid_found),
+        .m_nsid                (nvme_discovered_nsid),
+        .m_nsze                (nvme_discovered_nsze),
+        .m_lba_bytes           (nvme_discovered_lba_bytes),
+        .m_mdts                (nvme_discovered_mdts),
+        .m_mpsmin              (nvme_mpsmin)
+    );
+
+{% if cnfg.en_strm %}
+    // Convert the BD-local [4 TiB, 8 TiB) routing window into ordinary Coyote
+    // host DMA requests. Client 0 is the existing vFPGA path; client 1 is NVMe.
+    nvme_axi_host_bridge inst_nvme_axi_host_bridge (
+        .aclk                 (aclk),
+        .aresetn              (aresetn),
+        .enable               (nvme_pl_ready),
+        .s_axi                (axi_nvme_host),
+        .m_host_dma_rd_req    (dma_pl_host_rd[1]),
+        .m_host_dma_wr_req    (dma_pl_host_wr[1]),
+        .s_axis_host_rd       (axis_pl_host_rd[1]),
+        .m_axis_host_wr       (axis_pl_host_wr[1])
+    );
+{% else %}
+    // Host streaming is disabled, so PL-NVMe host-memory transactions have no
+    // Coyote destination. Keep the optional BD master disconnected.
     always_comb axi_nvme_host.tie_off_s();
+{% endif %}
 
 {% if not cnfg.en_mem %}
     // Card-memory DMA is unavailable when EN_MEM=0, as in the HOST-NVMe flow.
@@ -954,6 +1037,26 @@ module shell_top (
         `DMA_REQ_ASSIGN(dma_rd_req[{{ i }}], dma_rd_req_int[{{ i }}])
         `DMA_REQ_ASSIGN(dma_wr_req[{{ i }}], dma_wr_req_int[{{ i }}])
     {% endfor %}
+{% endif %}
+
+{% if cnfg.en_nvme_pl and cnfg.en_strm %}
+    // Share the existing shell host channel without changing the static QDMA
+    // interface. dma_stream_mux is a standalone common component and leaves
+    // the existing shell_split_data infrastructure unchanged.
+    dma_stream_mux #(
+        .N_CLIENTS(N_PL_HOST_CLIENTS)
+    ) inst_pl_nvme_host_mux (
+        .aclk            (aclk),
+        .aresetn         (aresetn),
+        .s_client_rd_req (dma_pl_host_rd),
+        .m_shared_rd_req (dma_rd_req[{{ cnfg.strm_chan }}]),
+        .s_shared_rd_data(axis_dyn_in[{{ cnfg.strm_chan }}]),
+        .m_client_rd_data(axis_pl_host_rd),
+        .s_client_wr_req (dma_pl_host_wr),
+        .m_shared_wr_req (dma_wr_req[{{ cnfg.strm_chan }}]),
+        .s_client_wr_data(axis_pl_host_wr),
+        .m_shared_wr_data(axis_dyn_out[{{ cnfg.strm_chan }}])
+    );
 {% endif %}
 
 {% if cnfg.fpga_arch == 'ultrascale_plus' %}
@@ -1856,10 +1959,17 @@ module shell_top (
         .m_axi_ddr(axi_mem[{{ cnfg.n_net_chan }}+:{{ (1+cnfg.n_reg*cnfg.n_card_axi) }}]),
 {% endif %}
 {% if cnfg.en_strm %}
+{% if cnfg.en_nvme_pl %}
+        .m_host_dma_rd_req(dma_pl_host_rd[0]),
+        .m_host_dma_wr_req(dma_pl_host_wr[0]),
+        .s_axis_host(axis_pl_host_rd[0]),
+        .m_axis_host(axis_pl_host_wr[0]),
+{% else %}
         .m_host_dma_rd_req(dma_rd_req[{{ cnfg.strm_chan }}]),
         .m_host_dma_wr_req(dma_wr_req[{{ cnfg.strm_chan }}]),
         .s_axis_host(axis_dyn_in[{{ cnfg.strm_chan }}]),
         .m_axis_host(axis_dyn_out[{{ cnfg.strm_chan }}]),
+{% endif %}
 {% endif %}
 {% if cnfg.en_mem %}
         .m_card_dma_rd_req(dma_rd_req[{{ cnfg.card_chan }}]),
@@ -1903,7 +2013,17 @@ module shell_top (
 {% endif %}
 {% if cnfg.en_nvme_pl %}
         .m_axi_nvme_mmio(axi_nvme_mmio),
+        .nvme_pl_ready(nvme_pl_ready),
         .nvme_setup_done(nvme_setup_done),
+        .nvme_setup_error(nvme_setup_error),
+        .nvme_setup_error_code(nvme_setup_error_code),
+        .nvme_namespace_info_valid(nvme_namespace_info_valid),
+        .nvme_target_nsid_found(nvme_target_nsid_found),
+        .nvme_discovered_nsid(nvme_discovered_nsid),
+        .nvme_discovered_nsze(nvme_discovered_nsze),
+        .nvme_discovered_lba_bytes(nvme_discovered_lba_bytes),
+        .nvme_discovered_mdts(nvme_discovered_mdts),
+        .nvme_mpsmin(nvme_mpsmin),
 {% endif %}
 {% if cnfg.en_host_networking %}
         .m_axis_host_tx(axis_host_tx), 

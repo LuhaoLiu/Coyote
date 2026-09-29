@@ -76,7 +76,9 @@ module pl_pcie_nvme_top_wrapper #(
     parameter [63:0] ADMIN_CQ_PCIE_ADDR = 64'h0000_1FFF_FFFF_F000,
         // RP_DMA_PCIE_BASE + RP_DMA_EXPECTED_SIZE - 64'h1000,
     parameter [63:0] IO_SQ_PCIE_ADDR = 64'h0000_1FFF_F401_0000,
-    parameter [63:0] IO_CQ_PCIE_ADDR = 64'h0000_1FFF_F402_0000
+    parameter [63:0] IO_CQ_PCIE_ADDR = 64'h0000_1FFF_F402_0000,
+    // Keep all ports present; production builds disable optional diagnostics.
+    parameter ENABLE_SETUP_DEBUG = 1'b0
 ) (
     input  wire                           aclk,
     input  wire                           aresetn,
@@ -562,6 +564,7 @@ module pl_pcie_nvme_top_wrapper #(
     );
 
     pl_pcie_nvme_setup_top #(
+        .ENABLE_SETUP_DEBUG(ENABLE_SETUP_DEBUG),
         .MMIO_ADDR_WIDTH(MMIO_ADDR_WIDTH),
         .MMIO_ID_WIDTH(MMIO_ID_WIDTH),
         .DMA_ADDR_WIDTH(DMA_ADDR_WIDTH),

@@ -981,6 +981,7 @@ proc cr_bd_design_plnvme { parentCell } {
   # Request 512-byte MPS, bounded at run time
   # by the endpoint capability discovered by the enumeration FSM.
   set_property CONFIG.PCIE_TARGET_MPS {2} $pl_pcie_nvme_top_wra_0
+  set_property CONFIG.ENABLE_SETUP_DEBUG $en_plnvme_debug $pl_pcie_nvme_top_wra_0
 
   # Create instance: qdma_0, and set properties
   set qdma_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:qdma:5.1 qdma_0 ]

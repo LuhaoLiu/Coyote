@@ -74,7 +74,8 @@ module pl_pcie_nvme_setup_top #(
     parameter logic [63:0] IO_SQ_PCIE_ADDR =
         64'h0000_1FFF_F401_0000,
     parameter logic [63:0] IO_CQ_PCIE_ADDR =
-        64'h0000_1FFF_F402_0000
+        64'h0000_1FFF_F402_0000,
+    parameter bit ENABLE_SETUP_DEBUG = 1'b0
 ) (
     input  wire                         aclk,
     input  wire                         aresetn,
@@ -278,16 +279,29 @@ module pl_pcie_nvme_setup_top #(
     wire [63:0]                fsm_ram_wdata;
     wire [63:0]                ram_b_rdata;
 
-    assign debug_ram_granted = debug_ram_read_enable && !fsm_ram_en;
-    assign debug_ram_read_data = ram_b_rdata;
-
-    wire ram_b_en = fsm_ram_en || debug_ram_granted;
-    wire [7:0] ram_b_we = fsm_ram_en ? fsm_ram_we : 8'h00;
-    wire [RAM_ADDR_WIDTH-1:0] ram_b_addr =
-        fsm_ram_en ? fsm_ram_addr : debug_ram_read_addr;
+    wire ram_b_en;
+    wire [7:0] ram_b_we;
+    wire [RAM_ADDR_WIDTH-1:0] ram_b_addr;
     wire [63:0] ram_b_wdata = fsm_ram_wdata;
 
+    generate
+        if (ENABLE_SETUP_DEBUG) begin : gen_debug_ram
+            assign debug_ram_granted = debug_ram_read_enable && !fsm_ram_en;
+            assign debug_ram_read_data = ram_b_rdata;
+            assign ram_b_en = fsm_ram_en || debug_ram_granted;
+            assign ram_b_we = fsm_ram_en ? fsm_ram_we : 8'h00;
+            assign ram_b_addr = fsm_ram_en ? fsm_ram_addr : debug_ram_read_addr;
+        end else begin : gen_no_debug_ram
+            assign debug_ram_granted = 1'b0;
+            assign debug_ram_read_data = 64'd0;
+            assign ram_b_en = fsm_ram_en;
+            assign ram_b_we = fsm_ram_we;
+            assign ram_b_addr = fsm_ram_addr;
+        end
+    endgenerate
+
     pl_pcie_nvme_setup_fsm #(
+        .ENABLE_SETUP_DEBUG(ENABLE_SETUP_DEBUG),
         .MMIO_ADDR_WIDTH(MMIO_ADDR_WIDTH),
         .RAM_ADDR_WIDTH(RAM_ADDR_WIDTH),
         .NVME_MMIO_AXI_BASE(NVME_MMIO_AXI_BASE),

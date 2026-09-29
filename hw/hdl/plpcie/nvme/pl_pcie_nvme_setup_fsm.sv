@@ -95,7 +95,10 @@ module pl_pcie_nvme_setup_fsm #(
 
     parameter integer READY_TIMEOUT_POLLS = 1_000_000,
     parameter integer CQ_TIMEOUT_POLLS    = 1_000_000,
-    parameter logic [31:0] NVME_NSID      = 32'd1
+    parameter logic [31:0] NVME_NSID      = 32'd1,
+    // Elaboration-time switch for health snapshots and debug-only captures.
+    // Mandatory discovery, queue setup, timeouts and error_code remain active.
+    parameter bit ENABLE_SETUP_DEBUG = 1'b0
 ) (
     input  wire                         clk,
     input  wire                         resetn,
@@ -164,7 +167,8 @@ module pl_pcie_nvme_setup_fsm #(
     output logic [15:0]                 discovered_metadata_bytes,
     output logic [31:0]                 discovered_lba_bytes,
 
-    // Optional diagnostics run only AFTER queues_ready/setup_done. Neither
+    // Optional diagnostics are zero when ENABLE_SETUP_DEBUG=0. When enabled,
+    // they run only AFTER queues_ready/setup_done. Neither
     // unsupported commands nor diagnostic transport faults invalidate setup.
     output logic                        health_snapshot_busy,
     output logic                        health_snapshot_done,
@@ -201,7 +205,7 @@ module pl_pcie_nvme_setup_fsm #(
     output logic [63:0]                 health_thermal_transitions,
     output logic [63:0]                 health_thermal_time,
 
-    // Stable, compact ILA probes.
+    // Stable, compact ILA probes; zero when disabled, except functional error_code.
     output wire [7:0]                   state_dbg,
     output logic [7:0]                  error_code,
     output logic [7:0]                  last_opcode,
@@ -380,9 +384,11 @@ module pl_pcie_nvme_setup_fsm #(
     logic        queues_ready_latch;
     logic        health_request_d;
     logic [3:0]  health_word_index;
-    wire health_command = (pending_command >= CMD_HEALTH_CTRL) &&
+    wire health_command = ENABLE_SETUP_DEBUG &&
+                          (pending_command >= CMD_HEALTH_CTRL) &&
                           (pending_command <= CMD_HEALTH_SMART);
-    wire [3:0] health_command_index = pending_command - CMD_HEALTH_CTRL;
+    wire [3:0] health_command_index = ENABLE_SETUP_DEBUG ?
+                                     pending_command - CMD_HEALTH_CTRL : 4'd0;
 
     logic [8:0]  namespace_list_word_index;
     logic [63:0] namespace_list_read_data;
@@ -440,14 +446,14 @@ module pl_pcie_nvme_setup_fsm #(
     assign queues_ready        = queues_ready_latch;
     assign setup_done          = queues_ready_latch;
     assign setup_error         = (state == ST_ERROR);
-    assign state_dbg           = state;
+    assign state_dbg           = ENABLE_SETUP_DEBUG ? state : 8'd0;
 
     always_comb begin
-        admin_sq_tail_dbg   = admin_sq_tail;
-        admin_cq_head_dbg   = admin_cq_head;
-        admin_cq_phase_dbg  = admin_cq_phase;
-        ready_poll_count_dbg= ready_poll_count;
-        cq_poll_count_dbg   = cq_poll_count;
+        admin_sq_tail_dbg   = ENABLE_SETUP_DEBUG ? admin_sq_tail : 16'd0;
+        admin_cq_head_dbg   = ENABLE_SETUP_DEBUG ? admin_cq_head : 16'd0;
+        admin_cq_phase_dbg  = ENABLE_SETUP_DEBUG ? admin_cq_phase : 1'b0;
+        ready_poll_count_dbg= ENABLE_SETUP_DEBUG ? ready_poll_count : 32'd0;
+        cq_poll_count_dbg   = ENABLE_SETUP_DEBUG ? cq_poll_count : 32'd0;
     end
 
     function automatic logic [7:0] command_opcode(input command_t command);
@@ -455,12 +461,12 @@ module pl_pcie_nvme_setup_fsm #(
             case (command)
                 CMD_IDENTIFY_CTRL,
                 CMD_IDENTIFY_LIST,
-                CMD_HEALTH_CTRL,
                 CMD_IDENTIFY_NS:    command_opcode = 8'h06;
+                CMD_HEALTH_CTRL:    command_opcode = ENABLE_SETUP_DEBUG ? 8'h06 : 8'h00;
                 CMD_HEALTH_POWER,
                 CMD_HEALTH_APST,
-                CMD_HEALTH_HCTM:     command_opcode = 8'h0a;
-                CMD_HEALTH_SMART:    command_opcode = 8'h02;
+                CMD_HEALTH_HCTM:     command_opcode = ENABLE_SETUP_DEBUG ? 8'h0a : 8'h00;
+                CMD_HEALTH_SMART:    command_opcode = ENABLE_SETUP_DEBUG ? 8'h02 : 8'h00;
                 CMD_SET_NUM_QUEUES: command_opcode = 8'h09;
                 CMD_CREATE_IO_CQ:   command_opcode = 8'h05;
                 CMD_CREATE_IO_SQ:   command_opcode = 8'h01;
@@ -474,11 +480,12 @@ module pl_pcie_nvme_setup_fsm #(
             case (command)
                 CMD_IDENTIFY_CTRL,
                 CMD_IDENTIFY_LIST,
-                CMD_HEALTH_CTRL,
-                CMD_HEALTH_APST,
-                CMD_HEALTH_SMART,
                 CMD_IDENTIFY_NS:
                     command_prp1 = DISCOVERY_PCIE_ADDR;
+                CMD_HEALTH_CTRL,
+                CMD_HEALTH_APST,
+                CMD_HEALTH_SMART:
+                    command_prp1 = ENABLE_SETUP_DEBUG ? DISCOVERY_PCIE_ADDR : 64'd0;
                 CMD_CREATE_IO_CQ:
                     command_prp1 = IO_CQ_PCIE_ADDR;
                 CMD_CREATE_IO_SQ:
@@ -506,7 +513,7 @@ module pl_pcie_nvme_setup_fsm #(
         begin
             dw0  = {cid, 8'h00, command_opcode(command)};
             dw1  = (command == CMD_IDENTIFY_NS) ? NVME_NSID : 32'd0;
-            if (command == CMD_HEALTH_SMART)
+            if (ENABLE_SETUP_DEBUG && command == CMD_HEALTH_SMART)
                 dw1 = 32'hffff_ffff; // Controller-wide SMART, not per-namespace.
             dw10 = 32'd0;
             dw11 = 32'd0;
@@ -514,20 +521,20 @@ module pl_pcie_nvme_setup_fsm #(
             prp1 = command_prp1(command);
 
             case (command)
-                CMD_IDENTIFY_CTRL,
-                CMD_HEALTH_CTRL: begin
+                CMD_IDENTIFY_CTRL: begin
                     dw10 = 32'd1; // CNS=01h: Identify Controller
                 end
+                CMD_HEALTH_CTRL: if (ENABLE_SETUP_DEBUG) dw10 = 32'd1;
                 CMD_IDENTIFY_LIST: begin
                     dw10 = 32'd2; // CNS=02h: Active Namespace ID list
                 end
                 CMD_IDENTIFY_NS: begin
                     dw10 = 32'd0; // CNS=00h: Identify Namespace
                 end
-                CMD_HEALTH_POWER: dw10 = 32'h02; // SEL=0: current values only.
-                CMD_HEALTH_APST:  dw10 = 32'h0c; // Also DMA-writes a 256-byte table.
-                CMD_HEALTH_HCTM:  dw10 = 32'h10;
-                CMD_HEALTH_SMART: begin
+                CMD_HEALTH_POWER: if (ENABLE_SETUP_DEBUG) dw10 = 32'h02; // SEL=0.
+                CMD_HEALTH_APST:  if (ENABLE_SETUP_DEBUG) dw10 = 32'h0c; // DMA table.
+                CMD_HEALTH_HCTM:  if (ENABLE_SETUP_DEBUG) dw10 = 32'h10;
+                CMD_HEALTH_SMART: if (ENABLE_SETUP_DEBUG) begin
                     // LID=02h, RAE=1, NUMD=127: retain events, read 512 bytes.
                     dw10 = 32'h007f_8002;
                 end
@@ -618,8 +625,10 @@ module pl_pcie_nvme_setup_fsm #(
         begin
             pending_command <= command;
             pending_cid     <= next_cid;
-            last_cid        <= next_cid;
-            last_opcode     <= command_opcode(command);
+            if (ENABLE_SETUP_DEBUG) begin
+                last_cid    <= next_cid;
+                last_opcode <= command_opcode(command);
+            end
             next_cid        <= next_cid + 1'b1;
             sqe_word_index  <= 3'd0;
             state           <= ST_SQE_WRITE;
@@ -630,7 +639,7 @@ module pl_pcie_nvme_setup_fsm #(
     // DMA may still arrive. Stop diagnostics until reset, but keep I/O ready.
     task automatic fail_transaction(input logic [7:0] reason);
         begin
-            if (queues_ready_latch) begin
+            if (ENABLE_SETUP_DEBUG && queues_ready_latch) begin
                 health_error_code    <= reason;
                 health_snapshot_busy <= 1'b0;
                 health_snapshot_done <= 1'b1;
@@ -747,7 +756,7 @@ module pl_pcie_nvme_setup_fsm #(
                            (discovered_lba_format_index >> 1);
             end
 
-            ST_HEALTH_CTRL_REQ: begin
+            ST_HEALTH_CTRL_REQ: if (ENABLE_SETUP_DEBUG) begin
                 ram_en = 1'b1;
                 case (health_word_index)
                     4'd0: ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) + 8);   // FR
@@ -759,7 +768,7 @@ module pl_pcie_nvme_setup_fsm #(
                 endcase
             end
 
-            ST_HEALTH_PS_REQ: begin
+            ST_HEALTH_PS_REQ: if (ENABLE_SETUP_DEBUG) begin
                 ram_en = 1'b1;
                 // Get Features FID 02 has no DMA payload, so Identify's PSDs
                 // are still intact. Read before APST/SMART reuse the page.
@@ -768,7 +777,7 @@ module pl_pcie_nvme_setup_fsm #(
                            {28'd0, health_word_index});
             end
 
-            ST_HEALTH_SMART_REQ: begin
+            ST_HEALTH_SMART_REQ: if (ENABLE_SETUP_DEBUG) begin
                 ram_en = 1'b1;
                 // First read bytes 0..7, then contiguous bytes 160..231.
                 ram_addr = RAM_ADDR_WIDTH'((DISCOVERY_RAM_OFFSET >> 3) +
@@ -810,7 +819,7 @@ module pl_pcie_nvme_setup_fsm #(
             health_snapshot_done     <= 1'b0;
             health_snapshot_count    <= 32'd0;
             health_valid             <= 5'd0;
-            health_command_status    <= {80{1'b1}};
+            health_command_status    <= ENABLE_SETUP_DEBUG ? {80{1'b1}} : 80'd0;
             health_error_code        <= 8'd0;
             health_firmware_revision <= 64'd0;
             health_npss              <= 8'd0;
@@ -873,7 +882,7 @@ module pl_pcie_nvme_setup_fsm #(
             submitted_command_count  <= 32'd0;
             allocated_io_queues      <= 32'd0;
         end else begin
-            health_request_d <= health_snapshot_request;
+            health_request_d <= ENABLE_SETUP_DEBUG && health_snapshot_request;
             // enum_done is latched by the enumeration FSM.  If it disappears
             // while setup is active, continuing to touch the endpoint is not
             // safe because BAR/BDF state may have been reset.
@@ -1218,8 +1227,8 @@ module pl_pcie_nvme_setup_fsm #(
 
                     ST_CQ_POLL_START: begin
                         cq_poll_count <= 32'd0;
-                        submitted_command_count <=
-                            submitted_command_count + 1'b1;
+                        if (ENABLE_SETUP_DEBUG)
+                            submitted_command_count <= submitted_command_count + 1'b1;
                         state <= ST_CQ_READ0_REQ;
                     end
 
@@ -1240,7 +1249,8 @@ module pl_pcie_nvme_setup_fsm #(
                     end
 
                     ST_CQ_CHECK: begin
-                        last_cqe <= {cqe_word1, cqe_word0};
+                        if (ENABLE_SETUP_DEBUG)
+                            last_cqe <= {cqe_word1, cqe_word0};
 
                         // P is bit 16 of CQE DW3, hence bit 48 of the upper
                         // 64-bit RAM word.  A mismatched phase means empty.
@@ -1252,7 +1262,8 @@ module pl_pcie_nvme_setup_fsm #(
                                 state <= ST_CQ_READ0_REQ;
                             end
                         end else if (cqe_word1[47:32] != pending_cid) begin
-                            last_completion_cid <= cqe_word1[47:32];
+                            if (ENABLE_SETUP_DEBUG)
+                                last_completion_cid <= cqe_word1[47:32];
                             fail_transaction(ERR_CQ_CID);
                         end else if (cqe_word1[31:16] != expected_sqid) begin
                             fail_transaction(ERR_CQ_SQID);
@@ -1265,12 +1276,15 @@ module pl_pcie_nvme_setup_fsm #(
                             // consumed and acknowledged before the next one.
                             state <= ST_CQ_RESULT_REQ;
                         end else if (cqe_word1[63:49] != 15'd0) begin
-                            last_completion_status <= {1'b0, cqe_word1[63:49]};
+                            if (ENABLE_SETUP_DEBUG)
+                                last_completion_status <= {1'b0, cqe_word1[63:49]};
                             error_code <= ERR_CQ_STATUS;
                             state      <= ST_ERROR;
                         end else begin
-                            last_completion_cid    <= cqe_word1[47:32];
-                            last_completion_status <= 16'd0;
+                            if (ENABLE_SETUP_DEBUG) begin
+                                last_completion_cid    <= cqe_word1[47:32];
+                                last_completion_status <= 16'd0;
+                            end
                             state <= ST_CQ_RESULT_REQ;
                         end
                     end
@@ -1283,7 +1297,8 @@ module pl_pcie_nvme_setup_fsm #(
                         // and phase reads. Re-read DW0 only after ownership,
                         // CID and SQID are validated, before acknowledging.
                         cqe_word0 <= ram_rdata;
-                        last_cqe <= {cqe_word1, ram_rdata};
+                        if (ENABLE_SETUP_DEBUG)
+                            last_cqe <= {cqe_word1, ram_rdata};
                         state <= ST_CQ_ACK;
                     end
 
@@ -1321,7 +1336,8 @@ module pl_pcie_nvme_setup_fsm #(
                             CMD_IDENTIFY_NS:
                                 state <= ST_DISC_NS_W0_REQ;
                             CMD_SET_NUM_QUEUES: begin
-                                allocated_io_queues <= cqe_word0[31:0];
+                                if (ENABLE_SETUP_DEBUG)
+                                    allocated_io_queues <= cqe_word0[31:0];
                                 state <= ST_PREP_CREATE_IO_CQ;
                             end
                             CMD_CREATE_IO_CQ:
@@ -1330,14 +1346,14 @@ module pl_pcie_nvme_setup_fsm #(
                                 queues_ready_latch <= 1'b1;
                                 state <= ST_DONE;
                             end
-                            CMD_HEALTH_CTRL: begin
+                            CMD_HEALTH_CTRL: if (ENABLE_SETUP_DEBUG) begin
                                 health_word_index <= 4'd0;
                                 if (cqe_word1[63:49] == 0)
                                     state <= ST_HEALTH_CTRL_REQ;
                                 else
                                     prepare_command(CMD_HEALTH_POWER);
                             end
-                            CMD_HEALTH_POWER: begin
+                            CMD_HEALTH_POWER: if (ENABLE_SETUP_DEBUG) begin
                                 if (cqe_word1[63:49] == 0) begin
                                     health_valid[1] <= 1'b1;
                                     health_power_management <= cqe_word0[31:0];
@@ -1350,21 +1366,21 @@ module pl_pcie_nvme_setup_fsm #(
                                 end else
                                     prepare_command(CMD_HEALTH_APST);
                             end
-                            CMD_HEALTH_APST: begin
+                            CMD_HEALTH_APST: if (ENABLE_SETUP_DEBUG) begin
                                 if (cqe_word1[63:49] == 0) begin
                                     health_valid[2] <= 1'b1;
                                     health_apst <= cqe_word0[31:0];
                                 end
                                 prepare_command(CMD_HEALTH_HCTM);
                             end
-                            CMD_HEALTH_HCTM: begin
+                            CMD_HEALTH_HCTM: if (ENABLE_SETUP_DEBUG) begin
                                 if (cqe_word1[63:49] == 0) begin
                                     health_valid[3] <= 1'b1;
                                     health_hctm <= cqe_word0[31:0];
                                 end
                                 prepare_command(CMD_HEALTH_SMART);
                             end
-                            CMD_HEALTH_SMART: begin
+                            CMD_HEALTH_SMART: if (ENABLE_SETUP_DEBUG) begin
                                 health_word_index <= 4'd0;
                                 state <= (cqe_word1[63:49] == 0) ? ST_HEALTH_SMART_REQ :
                                                                  ST_HEALTH_FINISH;
@@ -1378,15 +1394,16 @@ module pl_pcie_nvme_setup_fsm #(
 
                     ST_MMIO_REQ: begin
                         if (mmio_cmd_valid && mmio_cmd_ready) begin
-                            last_mmio_offset <=
-                                mmio_addr_reg - NVME_MMIO_AXI_BASE;
+                            if (ENABLE_SETUP_DEBUG)
+                                last_mmio_offset <= mmio_addr_reg - NVME_MMIO_AXI_BASE;
                             state <= ST_MMIO_RSP;
                         end
                     end
 
                     ST_MMIO_RSP: begin
                         if (mmio_rsp_valid) begin
-                            last_mmio_rdata <= mmio_rsp_rdata;
+                            if (ENABLE_SETUP_DEBUG)
+                                last_mmio_rdata <= mmio_rsp_rdata;
                             if (mmio_rsp_timeout) begin
                                 fail_transaction(ERR_MMIO_TIMEOUT);
                             end else if (mmio_rsp_resp != AXI_OKAY) begin
@@ -1402,14 +1419,15 @@ module pl_pcie_nvme_setup_fsm #(
 
                     ST_DONE: begin
                         // Initial snapshot is automatic; later ones need a
-                        // VIO rising edge. Never reset or recreate queues.
-                        if (enum_done && (health_error_code == 0) &&
+                        // VIO rising edge. Production builds stay idle here.
+                        // Never reset or recreate queues.
+                        if (ENABLE_SETUP_DEBUG && enum_done && (health_error_code == 0) &&
                             (!health_snapshot_done ||
                              (health_snapshot_request && !health_request_d)))
                             state <= ST_HEALTH_START;
                     end
 
-                    ST_HEALTH_START: begin
+                    ST_HEALTH_START: if (ENABLE_SETUP_DEBUG) begin
                         health_snapshot_busy <= 1'b1;
                         health_snapshot_done <= 1'b0;
                         health_valid <= 5'd0;
@@ -1420,8 +1438,8 @@ module pl_pcie_nvme_setup_fsm #(
                         prepare_command(CMD_HEALTH_CTRL);
                     end
 
-                    ST_HEALTH_CTRL_REQ: state <= ST_HEALTH_CTRL_WAIT;
-                    ST_HEALTH_CTRL_WAIT: begin
+                    ST_HEALTH_CTRL_REQ: if (ENABLE_SETUP_DEBUG) state <= ST_HEALTH_CTRL_WAIT;
+                    ST_HEALTH_CTRL_WAIT: if (ENABLE_SETUP_DEBUG) begin
                         case (health_word_index)
                             4'd0: health_firmware_revision <= ram_rdata;
                             4'd1: health_npss <= ram_rdata[63:56];
@@ -1442,8 +1460,8 @@ module pl_pcie_nvme_setup_fsm #(
                         end
                     end
 
-                    ST_HEALTH_PS_REQ: state <= ST_HEALTH_PS_WAIT;
-                    ST_HEALTH_PS_WAIT: begin
+                    ST_HEALTH_PS_REQ: if (ENABLE_SETUP_DEBUG) state <= ST_HEALTH_PS_WAIT;
+                    ST_HEALTH_PS_WAIT: if (ENABLE_SETUP_DEBUG) begin
                         if (health_word_index == 0) begin
                             health_current_ps_summary[31:0] <= ram_rdata[31:0];
                             health_word_index <= 4'd1;
@@ -1455,8 +1473,8 @@ module pl_pcie_nvme_setup_fsm #(
                         end
                     end
 
-                    ST_HEALTH_SMART_REQ: state <= ST_HEALTH_SMART_WAIT;
-                    ST_HEALTH_SMART_WAIT: begin
+                    ST_HEALTH_SMART_REQ: if (ENABLE_SETUP_DEBUG) state <= ST_HEALTH_SMART_WAIT;
+                    ST_HEALTH_SMART_WAIT: if (ENABLE_SETUP_DEBUG) begin
                         case (health_word_index)
                             4'd0: health_smart_status <= ram_rdata;
                             4'd1: health_media_errors[63:0] <= ram_rdata;
@@ -1479,7 +1497,7 @@ module pl_pcie_nvme_setup_fsm #(
                         end
                     end
 
-                    ST_HEALTH_FINISH: begin
+                    ST_HEALTH_FINISH: if (ENABLE_SETUP_DEBUG) begin
                         health_snapshot_busy <= 1'b0;
                         health_snapshot_done <= 1'b1;
                         health_snapshot_count <= health_snapshot_count + 1'b1;

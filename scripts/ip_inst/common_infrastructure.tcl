@@ -53,6 +53,9 @@ set_property -dict [list CONFIG.TDATA_NUM_BYTES {24} CONFIG.REG_CONFIG {8} ] [ge
 create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 -module_name axis_register_slice_meta_256
 set_property -dict [list CONFIG.TDATA_NUM_BYTES {32} CONFIG.REG_CONFIG {8} ] [get_ips axis_register_slice_meta_256]
 
+create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 -module_name axis_register_slice_meta_384
+set_property -dict [list CONFIG.TDATA_NUM_BYTES {48} CONFIG.REG_CONFIG {8} ] [get_ips axis_register_slice_meta_384]
+
 create_ip -name axis_register_slice -vendor xilinx.com -library ip -version 1.1 -module_name axis_register_slice_meta_512
 set_property -dict [list CONFIG.TDATA_NUM_BYTES {64} CONFIG.REG_CONFIG {8} ] [get_ips axis_register_slice_meta_512]
 

@@ -35,15 +35,23 @@ NVMe submission requests from the vFPGA are sent as `req_t` values with `strm ==
 - `writeRead`: `1` for WRITE, `0` for READ
 
 ### NVMe completion interface (`s_nvme_cq_rsp` and `s_nvme_cpl`)
-Completions arrive as `nvme_cqe_t` (`dev_id[3:0]`, `cid[5:0]`, `status[14:0]`, `phase`). The bench engine demuxes them by `dev_id` to update per-device counters. Completions can arrive out of submission order.
+Completions arrive as `nvme_cqe_t` (`dev_id[3:0]`, `cid[7:0]`, `status[14:0]`, `phase`). The bench engine demuxes them by `dev_id` to update per-device counters. Completions can arrive out of submission order.
 
 The 16-bit `s_nvme_cq_rsp` channel returns one response per accepted request, in submission order within the region:
 
-| Bits | Meaning |
-| --- | --- |
-| `[15:12]` | Device ID |
-| `[11:6]` | Assigned CID, valid only on success |
-| `[5:0]` | Local error: 0 success, 1 device/namespace unknown, 3 PRP preparation failure, 6 permission/range failure |
+| Device | Assigned CID (success only) | Local error |
+| --- | --- | --- |
+| `[15:12]` | `[11:4]` | `[3:0]` |
+
+The layout is the same at every queue depth. The CID field is 8 bits wide, as in `nvme_cqe_t`; at depth 64 or 128 its upper bits are zero. Local errors are 0 success, 1 device/namespace unknown, 3 PRP preparation failure, and 6 permission/range failure (`NVME_RSP_ERROR_BITS` = 4, `NVME_RSP_CID_BITS` = 8).
+
+Set `-DNVME_QUEUE_DEPTH=256` when configuring hardware to increase the I/O queues; supported values are 64, 128, and 256 for both HOST and PL. Admin queues remain 64 entries. Build and bundle the driver, shell and application together. The driver reads the actual depth from shell NVMe configuration CSR bits `[16:8]` and uses it for HOST queue creation. The SQ, CQ and PRP-list address windows are the same at every depth (sized for 256 entries), so only the queue size changes. A ring permits depth minus one unconsumed SQ entries.
+
+Set `-DNVME_NUM_DEVICES=N` to instantiate control state for `N` device slots, numbered `0..N-1`. The default is 1; HOST supports every integer from 1 through 16. A HOST build using multiple SSDs must reserve enough slots. PL currently supports only one physical SSD/queue pair, so CMake requires `NVME_NUM_DEVICES=1` when `EN_NVME=1` and `NVME_TYPE=PL`. Device IDs remain four bits in requests, completions and the unchanged 16-bit assignment response. Inactive-device requests return the existing no-device error. Public SQ/CQ/PRP address windows and their backing data RAM geometry remain unchanged; CID state, CQ validity state and polling are pruned to the configured count. Shell CSR bits `[24:20]` advertise the actual count, and the matching driver rejects claims beyond this capacity.
+
+Each device allocates CIDs from a FIFO with a registered head. Accepted completions return CIDs to the FIFO; an aborted unpublished command returns its CID to a separate one-entry cache, consumed before the FIFO. This handles a completion and preparation abort in the same cycle with one FIFO write port. CID/PRP ownership remains separate from SQ space: SQHD advances SQ capacity, while only a validated completion or preparation abort releases a CID. The pool initializes for `NVME_QUEUE_DEPTH` clocks after reset or quiescent queue recreation (256 clocks = 1.024 microseconds at 250 MHz); submissions wait until initialization finishes.
+
+PL CQ doorbells batch 16 completions at depth 64, or 32 at larger depths, with a 1,000-cycle timeout; HOST retains its original batching. PL MMIO permits eight writes outstanding. Place-and-route timing and hardware throughput must be checked on the rebuilt design.
 
 Successful assignments do not count as completions or return outstanding-command credits. The benchmark ignores them and captures only a nonzero local error into the existing zero-extended `ERROR_REG`; a successful response can have a nonzero packed value. A local failure still requires treating the benchmark run as failed and resetting before retry: its existing inflight counter only decrements on `s_nvme_cpl`.
 

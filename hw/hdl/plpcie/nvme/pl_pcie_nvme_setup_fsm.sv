@@ -72,7 +72,8 @@ module pl_pcie_nvme_setup_fsm #(
 
     parameter logic [63:0] KNOWN_CAP = 64'h1800_C030_1E02_3FFF,
     parameter logic [31:0] KNOWN_VS  = 32'h0002_0000,
-    parameter integer QUEUE_DEPTH = 64,
+    parameter integer QUEUE_DEPTH = 64, // Admin queues remain in 4 KiB pages.
+    parameter integer IO_QUEUE_DEPTH = 64,
 
     // The three Identify payloads are sequential and share one 4-KiB page.
     // Admin SQ and CQ have separate pages for an unambiguous 16-KiB layout.
@@ -87,9 +88,10 @@ module pl_pcie_nvme_setup_fsm #(
         RP_DMA_PCIE_BASE + RP_DMA_PCIE_SIZE - 64'h1000,
 
     // I/O queues are owned by the surrounding system and are deliberately
-    // not backed by this module's RAM.
+    // not backed by this module's RAM. The SQ window is fixed for every
+    // depth: 16 KiB (256 entries) per device.
     parameter logic [63:0] IO_SQ_PCIE_ADDR       =
-        64'h0000_1FFF_F401_0000,
+        64'h0000_1FFF_F404_0000,
     parameter logic [63:0] IO_CQ_PCIE_ADDR       =
         64'h0000_1FFF_F402_0000,
 
@@ -543,11 +545,11 @@ module pl_pcie_nvme_setup_fsm #(
                     dw11 = 32'd0; // Request one SQ and one CQ (zero based)
                 end
                 CMD_CREATE_IO_CQ: begin
-                    dw10 = ((QUEUE_DEPTH - 1) << 16) | 16'd1;
+                    dw10 = ((IO_QUEUE_DEPTH - 1) << 16) | 16'd1;
                     dw11 = 32'h0000_0001; // PC=1, IEN=0, IV=0
                 end
                 CMD_CREATE_IO_SQ: begin
-                    dw10 = ((QUEUE_DEPTH - 1) << 16) | 16'd1;
+                    dw10 = ((IO_QUEUE_DEPTH - 1) << 16) | 16'd1;
                     dw11 = 32'h0001_0001; // CQID=1, QPRIO=0, PC=1
                 end
                 default: begin
@@ -1518,9 +1520,14 @@ module pl_pcie_nvme_setup_fsm #(
     end
 
     initial begin
-        if ((QUEUE_DEPTH < 2) || (QUEUE_DEPTH > 4096) ||
+        if ((IO_QUEUE_DEPTH < 2) || (IO_QUEUE_DEPTH > 256) ||
+            ((IO_QUEUE_DEPTH & (IO_QUEUE_DEPTH - 1)) != 0))
+            $error("pl_pcie_nvme_setup_fsm: IO_QUEUE_DEPTH must be a power of two in [2,256]");
+        if ((KNOWN_CAP[15:0] + 1) < IO_QUEUE_DEPTH)
+            $error("pl_pcie_nvme_setup_fsm: IO_QUEUE_DEPTH exceeds known CAP.MQES");
+        if ((QUEUE_DEPTH < 2) || (QUEUE_DEPTH > 64) ||
             ((QUEUE_DEPTH & (QUEUE_DEPTH - 1)) != 0))
-            $error("pl_pcie_nvme_setup_fsm: QUEUE_DEPTH must be a power of two in [2,4096]");
+            $error("pl_pcie_nvme_setup_fsm: QUEUE_DEPTH must be a power of two in [2,64] (4 KiB admin SQ)");
         if ((KNOWN_CAP[15:0] + 1) < QUEUE_DEPTH)
             $error("pl_pcie_nvme_setup_fsm: QUEUE_DEPTH exceeds known CAP.MQES");
         if ((KNOWN_CAP[35:32] != 4'd0) ||

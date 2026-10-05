@@ -60,7 +60,6 @@
 #define NVME_ADMIN_DELETE_IO_CQ     0x04
 
 #define NVME_ADMIN_QUEUE_SIZE       64
-#define NVME_IO_QUEUE_SIZE          64
 
 #define NVME_PCI_CLASS_STORAGE_NVME 0x010802U
 
@@ -69,8 +68,8 @@
  * Per-device SQ/CQ memory regions; the SSD DMAs SQEs and CQEs to/from these.
  * Layout must match the HDL nvme_prp_dispatch/nvme_cnfg_slave region map.
  * ============================================================ */
-#define NVME_SQ_BASE        0x04010000UL    /* SQ BRAM, 4 KB per device */
-#define NVME_SQ_SIZE        0x1000UL
+#define NVME_SQ_BASE        0x04040000UL    /* SQ BRAM, 16 KB (256 entries) per device at every depth */
+#define NVME_SQ_SIZE        0x4000UL
 #define NVME_CQ_BASE        0x04020000UL    /* CQ BRAM, 4 KB per device */
 #define NVME_CQ_SIZE        0x1000UL
 
@@ -134,7 +133,7 @@ static int  nvme_disable_controller(struct nvme_dev_ctx *ctx);
 static int  nvme_wait_ready(struct nvme_dev_ctx *ctx, bool enabled, int timeout_ms);
 static int  nvme_submit_admin_cmd(struct nvme_dev_ctx *ctx, void *sqe, void *cqe_out);
 static int  nvme_identify(struct nvme_dev_ctx *ctx, uint32_t nsid);
-static int  nvme_create_io_queues(struct nvme_dev_ctx *ctx, uint16_t io_qid,
+static int  nvme_create_io_queues(struct nvme_dev_ctx *ctx, uint16_t io_qid, uint16_t depth,
                                   uint64_t io_sq_phys, uint64_t io_cq_phys);
 static void nvme_write_device_info(volatile struct nvme_fpga_cnfg_regs *cnfg,
                                    struct nvme_device_state *ds,
@@ -537,16 +536,21 @@ out:
 /* ============================================================
  * I/O queue creation (SQ/CQ memory lives in FPGA BRAM)
  * ============================================================ */
-static int nvme_create_io_queues(struct nvme_dev_ctx *ctx, uint16_t io_qid,
+static int nvme_create_io_queues(struct nvme_dev_ctx *ctx, uint16_t io_qid, uint16_t depth,
                                  uint64_t io_sq_phys, uint64_t io_cq_phys) {
     uint32_t sqe[16] = {0};
     int ret;
+
+    if (depth > ((readq(ctx->bar0 + NVME_REG_CAP) & 0xffff) + 1)) {
+        pr_err("NVMe I/O queue depth %u exceeds controller CAP.MQES\n", depth);
+        return -EINVAL;
+    }
 
     /* Create I/O CQ */
     sqe[0]  = NVME_ADMIN_CREATE_IO_CQ | (ctx->admin_cid++ << 16);
     sqe[6]  = (uint32_t)io_cq_phys;
     sqe[7]  = (uint32_t)(io_cq_phys >> 32);
-    sqe[10] = (io_qid & 0xFFFF) | (((NVME_IO_QUEUE_SIZE - 1) & 0xFFFF) << 16);
+    sqe[10] = (io_qid & 0xFFFF) | (((depth - 1) & 0xFFFF) << 16);
     sqe[11] = 1; /* PC=1 */
 
     ret = nvme_submit_admin_cmd(ctx, sqe, NULL);
@@ -559,7 +563,7 @@ static int nvme_create_io_queues(struct nvme_dev_ctx *ctx, uint16_t io_qid,
     sqe[0]  = NVME_ADMIN_CREATE_IO_SQ | (ctx->admin_cid++ << 16);
     sqe[6]  = (uint32_t)io_sq_phys;
     sqe[7]  = (uint32_t)(io_sq_phys >> 32);
-    sqe[10] = (io_qid & 0xFFFF) | (((NVME_IO_QUEUE_SIZE - 1) & 0xFFFF) << 16);
+    sqe[10] = (io_qid & 0xFFFF) | (((depth - 1) & 0xFFFF) << 16);
     sqe[11] = 1 | (io_qid << 16); /* PC=1, CQID */
 
     ret = nvme_submit_admin_cmd(ctx, sqe, NULL);
@@ -1007,6 +1011,12 @@ long vfpga_nvme_init(struct vfpga_dev *device, struct nvme_init_ioctl *req) {
     if (ds) {
         dbg_info("reusing dev_id=%u for bdf=%s\n", ds->dev_id, req->bdf);
     } else {
+        if (mgr->num_devices >= bd->nvme_num_devices) {
+            mutex_unlock(&mgr->lock);
+            pr_err("vfpga_nvme_init: shell supports only %u NVMe devices\n", bd->nvme_num_devices);
+            req->result = -ENOSPC;
+            return -ENOSPC;
+        }
         ds = nvme_alloc_device(mgr);
         if (!ds) {
             mutex_unlock(&mgr->lock);
@@ -1057,7 +1067,7 @@ long vfpga_nvme_init(struct vfpga_dev *device, struct nvme_init_ioctl *req) {
         ret = nvme_identify(&ds->ctx, req->nsid);
         if (ret) { goto err_identify; }
 
-        ret = nvme_create_io_queues(&ds->ctx, ds->io_qid,
+        ret = nvme_create_io_queues(&ds->ctx, ds->io_qid, bd->nvme_queue_depth,
                                     ds->io_sq_phys, ds->io_cq_phys);
         if (ret) { goto err_io; }
 

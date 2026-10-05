@@ -86,16 +86,20 @@ module nvme_sqe_builder (
     assign m_nvme_user_rsp.data.vfid = cmd_C.vfid;
     assign m_nvme_user_rsp.data.dev_id = cmd_C.dev_id;
     // Preserve shared types/ports: the historical error field carries
-    // {device[3:0], CID[5:0], local_error[5:0]}. CID is valid only on success.
+    // {device[15:12], CID[11:4], error[3:0]} at every queue depth. The CID is
+    // zero-extended to 8 bits and valid only on success.
     assign m_nvme_user_rsp.data.error =
-        {cmd_C.dev_id, ((error_C == 0) ? cid_C : 6'b0), error_C[5:0]};
+        {cmd_C.dev_id,
+         ((error_C == 0) ? NVME_RSP_CID_BITS'(cid_C) : {NVME_RSP_CID_BITS{1'b0}}),
+         error_C[NVME_RSP_ERROR_BITS-1:0]};
 
 `ifndef SYNTHESIS
-    initial assert (N_NVME_BITS == 4 && NVME_QUEUE_BITS == 6)
-        else $fatal(1, "NVMe assignment response requires 4-bit device and 6-bit CID");
+    initial assert (N_NVME_BITS == 4 && NVME_RSP_CID_BITS == 8 && NVME_RSP_ERROR_BITS == 4 &&
+                    NVME_QUEUE_BITS >= 6 && NVME_QUEUE_BITS <= NVME_RSP_CID_BITS)
+        else $fatal(1, "NVMe assignment response requires 4-bit device, 8-bit CID and 4-bit error fields");
     always @(posedge aclk)
         if (aresetn && m_nvme_user_rsp.valid)
-            assert (error_C[15:6] == 0)
+            assert (error_C[15:NVME_RSP_ERROR_BITS] == 0)
                 else $fatal(1, "NVMe local error does not fit the response field");
 `endif
 

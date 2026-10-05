@@ -423,7 +423,16 @@ package lynxTypes;
 
     // NVMe parameters
     localparam integer N_NVME_BITS = 4;
-    localparam integer NVME_QUEUE_BITS = 6;
+    // Instantiated capacity is independent of the public 4-bit device ID.
+    localparam integer NVME_NUM_DEVICES = {{ cnfg.nvme_num_devices }};
+    // Queue geometry is shared by shell, applications, setup engine, and driver.
+    localparam integer NVME_QUEUE_DEPTH = {{ cnfg.nvme_queue_depth }};
+    localparam integer NVME_QUEUE_BITS = $clog2(NVME_QUEUE_DEPTH);
+    // Assignment response {device[15:12], CID[11:4], error[3:0]} at every depth.
+    // CIDs are 8 bits in the response and in nvme_cqe_t; CIDs of shallower
+    // queues are zero-extended.
+    localparam integer NVME_RSP_CID_BITS = 8;
+    localparam integer NVME_RSP_ERROR_BITS = 4;
     localparam integer PRP_ADDR_BITS = 5;
     localparam integer NSID_BITS = 4;
     localparam integer LBAF_BITS = 4;
@@ -990,7 +999,7 @@ package lynxTypes;
     // CQ entry
     typedef struct packed {
         logic [N_NVME_BITS-1:0]     dev_id;
-        logic [NVME_QUEUE_BITS-1:0] cid;     // SQ slot (= CID)
+        logic [NVME_RSP_CID_BITS-1:0] cid;   // SQ slot (= CID), zero-extended to 8 bits at every depth
         logic [14:0]                status;
         logic                       phase;
     } nvme_cqe_t;

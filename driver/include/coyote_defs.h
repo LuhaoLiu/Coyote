@@ -285,6 +285,10 @@ extern bool en_hmm;
 #define EN_NVME_SHIFT 0x0
 #define NVME_TYPE_MASK 0x2
 #define NVME_TYPE_SHIFT 0x1
+#define NVME_QUEUE_DEPTH_MASK 0x1ff00ULL
+#define NVME_QUEUE_DEPTH_SHIFT 8
+#define NVME_NUM_DEVICES_MASK 0x1f00000ULL
+#define NVME_NUM_DEVICES_SHIFT 20
 #define QSFP_MASK 0x2
 #define QSFP_SHIFT 0x1
 
@@ -1386,6 +1390,11 @@ struct bus_driver_data {
 
     /// NVMe connection topology; bit 1 of shell_cnfg->nvme_cnfg (HOST=0, PL=1)
     enum coyote_nvme_type nvme_type;
+
+    /// I/O queue entries from the matching shell's CSR [16:8].
+    uint16_t nvme_queue_depth;
+    /// Instantiated device slots from the matching shell's CSR [24:20].
+    uint8_t nvme_num_devices;
 
     /// Pointer to the FPGA NVMe config registers (single instance at SHELL_BAR + FPGA_NVME_CNFG_OFFS); NULL if EN_NVME is disabled
     volatile struct nvme_fpga_cnfg_regs *nvme_cnfg_regs;

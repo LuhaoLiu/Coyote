@@ -33,12 +33,16 @@ import lynxTypes::*;
  *
  * Doorbell producers present the address and the data on separate dmaIntf and
  * AXI4-Stream handshakes. This adapter serializes them into one 32-bit narrow
- * AXI4 write and waits for its write response before accepting another request.
+ * AXI4 write. All writes use ID zero and retain AW/W order; B responses may
+ * trail up to MAX_OUTSTANDING accepted requests without stalling each write.
  */
-module nvme_doorbell_axi_writer (
+module nvme_doorbell_axi_writer #(
+    parameter int unsigned MAX_OUTSTANDING = 8
+) (
     input  logic        aclk,
     input  logic        aresetn,
     input  logic        setup_done,
+    output logic        idle, // No buffered request, partial AW/W, or pending B.
 
     dmaIntf.s           s_dma_req,
     AXI4S.s             s_axis_data,
@@ -47,12 +51,16 @@ module nvme_doorbell_axi_writer (
 
     localparam int unsigned AXI_BYTE_LANES = AXI_DATA_BITS / 8;
     localparam int unsigned AXI_LANE_BITS  = $clog2(AXI_BYTE_LANES);
+    localparam int unsigned COUNT_BITS = $clog2(MAX_OUTSTANDING + 1);
+    // Reserve a credit at request acceptance, before either AXI channel issues.
+    logic [COUNT_BITS-1:0] outstanding;
+    wire accept_req = s_dma_req.valid && s_dma_req.ready;
+    wire accept_b = m_axi_mmio.bvalid && m_axi_mmio.bready;
 
     typedef enum logic [1:0] {
         ST_IDLE,
         ST_WAIT_DATA,
-        ST_SEND_WRITE,
-        ST_WAIT_RESPONSE
+        ST_SEND_WRITE
     } state_t;
 
     state_t state;
@@ -62,6 +70,7 @@ module nvme_doorbell_axi_writer (
     logic [AXI_BYTE_LANES-1:0]      write_strobe_reg;
     logic                           aw_pending;
     logic                           w_pending;
+    assign idle = (state == ST_IDLE) && (outstanding == 0);
 
     always_comb begin
         s_dma_req.ready = 1'b0;
@@ -85,7 +94,7 @@ module nvme_doorbell_axi_writer (
         m_axi_mmio.wstrb    = write_strobe_reg;
         m_axi_mmio.wvalid   = 1'b0;
 
-        m_axi_mmio.bready   = 1'b0;
+        m_axi_mmio.bready   = aresetn && (outstanding != 0);
 
         // This adapter only emits writes.
         m_axi_mmio.araddr   = '0;
@@ -105,7 +114,7 @@ module nvme_doorbell_axi_writer (
             ST_IDLE: begin
                 // Do not even accept a doorbell until the PL root complex has
                 // enumerated and initialized the NVMe controller and queues.
-                s_dma_req.ready = setup_done;
+                s_dma_req.ready = aresetn && setup_done && (outstanding < MAX_OUTSTANDING);
             end
 
             ST_WAIT_DATA: begin
@@ -115,10 +124,6 @@ module nvme_doorbell_axi_writer (
             ST_SEND_WRITE: begin
                 m_axi_mmio.awvalid = aw_pending;
                 m_axi_mmio.wvalid  = w_pending;
-            end
-
-            ST_WAIT_RESPONSE: begin
-                m_axi_mmio.bready = 1'b1;
             end
 
             default: begin
@@ -134,7 +139,13 @@ module nvme_doorbell_axi_writer (
             write_strobe_reg <= '0;
             aw_pending       <= 1'b0;
             w_pending        <= 1'b0;
+            outstanding      <= '0;
         end else begin
+            case ({accept_req, accept_b})
+                2'b10: outstanding <= outstanding + 1'b1;
+                2'b01: outstanding <= outstanding - 1'b1;
+                default: ;
+            endcase
             case (state)
                 ST_IDLE: begin
                     aw_pending <= 1'b0;
@@ -173,11 +184,6 @@ module nvme_doorbell_axi_writer (
 
                     if ((!aw_pending || m_axi_mmio.awready) &&
                         (!w_pending  || m_axi_mmio.wready))
-                        state <= ST_WAIT_RESPONSE;
-                end
-
-                ST_WAIT_RESPONSE: begin
-                    if (m_axi_mmio.bvalid && m_axi_mmio.bready)
                         state <= ST_IDLE;
                 end
 
@@ -189,6 +195,8 @@ module nvme_doorbell_axi_writer (
     end
 
 `ifndef SYNTHESIS
+    initial assert (MAX_OUTSTANDING > 0)
+        else $fatal(1, "nvme_doorbell_axi_writer: at least one credit is required");
     always_ff @(posedge aclk) begin
         if (aresetn && s_dma_req.valid && s_dma_req.ready) begin
             assert (s_dma_req.req.len == 4)

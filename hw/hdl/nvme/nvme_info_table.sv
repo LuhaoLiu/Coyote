@@ -36,7 +36,7 @@ import lynxTypes::*;
  * SQ space follows SQHD; CID/PRP ownership follows completion, independently.
  */
 module nvme_info_table #(
-    parameter int MAX_NVME_DEVICES = 16,
+    parameter int MAX_NVME_DEVICES = NVME_NUM_DEVICES,
     parameter int MAX_NSID         = 256
 ) (
     input  logic        aclk,
@@ -63,7 +63,12 @@ module nvme_info_table #(
     nvme_info_entry_t nvme_info_tbl [MAX_NVME_DEVICES][MAX_NSID];
     logic [NVME_QUEUE_BITS-1:0] sq_tail [MAX_NVME_DEVICES];
     logic [NVME_QUEUE_BITS-1:0] sq_head [MAX_NVME_DEVICES];
-    logic [63:0] cid_owned [MAX_NVME_DEVICES];
+    localparam int CID_COUNT = 1 << NVME_QUEUE_BITS;
+    // The free pool is authoritative. This bitmap is a simulation scoreboard,
+    // maintained with local updates to check ownership and return invariants.
+`ifndef SYNTHESIS
+    logic [CID_COUNT-1:0] cid_owned [MAX_NVME_DEVICES];
+`endif
     // At most one unpublished SQ slot per device. Tail commits only after
     // SQE storage, so a preparation failure can cancel without an SQ hole.
     logic sq_reserved [MAX_NVME_DEVICES];
@@ -80,70 +85,142 @@ module nvme_info_table #(
     logic [NVME_QUEUE_BITS-1:0] rsp_cid_C;
     logic [NVME_QUEUE_BITS-1:0] next_sq_tail;
 
-    // Register the device read, then two levels of eight-way selection, not a
-    // 64-way priority chain on request READY. The final check rejects stale choices
-    // after allocation; concurrent releases can only make more CIDs free.
-    function automatic logic [2:0] first_free8(input logic [7:0] bits_free);
-        casez (bits_free)
-            8'b???????1: first_free8 = 3'd0;
-            8'b??????10: first_free8 = 3'd1;
-            8'b?????100: first_free8 = 3'd2;
-            8'b????1000: first_free8 = 3'd3;
-            8'b???10000: first_free8 = 3'd4;
-            8'b??100000: first_free8 = 3'd5;
-            8'b?1000000: first_free8 = 3'd6;
-            default:     first_free8 = 3'd7;
-        endcase
-    endfunction
-
-    logic [7:0] free_groups_C;
-    logic [7:0][2:0] free_indices_C;
-    logic [N_NVME_BITS-1:0] group_dev_C, candidate_dev_C;
-    logic group_valid_C, candidate_valid_C;
-    logic [5:0] candidate_cid_C;
-    logic [63:0] free_bits;
-    logic [63:0] free_bits_C;
-    logic [N_NVME_BITS-1:0] selected_dev_C;
-    logic selected_valid_C;
-    logic [2:0] selected_group;
-    assign free_bits = (s_tbl_req.data.dev_id < MAX_NVME_DEVICES) ?
-                       ~cid_owned[s_tbl_req.data.dev_id] : 64'b0;
-    assign selected_group = first_free8(free_groups_C);
+    // One FIFO per device, with a registered head. Completion returns use its
+    // single write port. An aborted unpublished command uses a separate cache:
+    // at most one reservation exists per device, and allocation consumes this
+    // cache before the FIFO. Thus completion + abort needs no second write port.
+    logic [MAX_NVME_DEVICES-1:0] pool_ready, recycled_valid;
+    logic [NVME_QUEUE_BITS:0] free_count [MAX_NVME_DEVICES];
+    logic [NVME_QUEUE_BITS-1:0] pool_head [MAX_NVME_DEVICES];
+    logic [NVME_QUEUE_BITS-1:0] recycled_cid [MAX_NVME_DEVICES];
+    logic [NVME_QUEUE_BITS-1:0] candidate_cid_C;
+    logic candidate_valid_C;
+    wire allocate = s_tbl_req.valid && request_ready && rsp_N.error == NVME_NO_ERROR;
+    assign candidate_valid_C = (s_tbl_req.data.dev_id < MAX_NVME_DEVICES) ?
+        pool_ready[s_tbl_req.data.dev_id] &&
+        (recycled_valid[s_tbl_req.data.dev_id] || free_count[s_tbl_req.data.dev_id] != 0) : 1'b0;
+    assign candidate_cid_C = (s_tbl_req.data.dev_id < MAX_NVME_DEVICES) ?
+        (recycled_valid[s_tbl_req.data.dev_id] ? recycled_cid[s_tbl_req.data.dev_id] :
+         pool_head[s_tbl_req.data.dev_id]) : '0;
     assign alloc_cid = rsp_cid_C;
     assign s_tbl_req.ready = request_ready;
-    assign next_sq_tail = sq_tail[s_tbl_req.data.dev_id] + 1'b1;
+    assign next_sq_tail = (s_tbl_req.data.dev_id < MAX_NVME_DEVICES) ?
+                         sq_tail[s_tbl_req.data.dev_id] + 1'b1 : '0;
 
-    always_ff @(posedge aclk) begin
-        if (!aresetn) begin
-            free_groups_C <= '0;
-            free_indices_C <= '0;
-            group_dev_C <= '0;
-            candidate_dev_C <= '0;
-            group_valid_C <= 1'b0;
-            candidate_valid_C <= 1'b0;
-            candidate_cid_C <= '0;
-            free_bits_C <= '0;
-            selected_dev_C <= '0;
-            selected_valid_C <= 1'b0;
-        end else begin
-            free_bits_C <= free_bits;
-            selected_dev_C <= s_tbl_req.data.dev_id;
-            selected_valid_C <= s_tbl_req.valid;
-            group_dev_C <= selected_dev_C;
-            group_valid_C <= selected_valid_C;
-            for (int g = 0; g < 8; g++) begin
-                free_groups_C[g] <= |free_bits_C[g*8 +: 8];
-                free_indices_C[g] <= first_free8(free_bits_C[g*8 +: 8]);
+    for (genvar d = 0; d < MAX_NVME_DEVICES; d++) begin : gen_cid_pool
+        logic [NVME_QUEUE_BITS-1:0] free_fifo [CID_COUNT];
+        logic [NVME_QUEUE_BITS-1:0] read_ptr, write_ptr, init_ptr;
+        wire reset_device = s_update_tbl.valid && s_update_tbl.ready &&
+            s_update_tbl.data.reset_queue && s_update_tbl.data.dev_id == N_NVME_BITS'(d);
+        wire allocate_device = allocate && s_tbl_req.data.dev_id == N_NVME_BITS'(d);
+        wire resolve_device = resolve_valid && resolve_dev == N_NVME_BITS'(d) &&
+            sq_reserved[d] && reserved_cid[d] == resolve_cid;
+        wire return_abort = resolve_device && resolve_abort;
+        // cpl_valid is a retirement pulse, already validated against cid_live
+        // by nvme_top. A CID must never be returned merely on an SQHD change.
+        wire return_cpl = cpl_valid && cpl_dev == N_NVME_BITS'(d);
+        wire fifo_pop = allocate_device && !recycled_valid[d];
+        wire [NVME_QUEUE_BITS-1:0] next_read_ptr = read_ptr + 1'b1;
+
+        // No array reset: initialize one word per clock, in parallel for all
+        // devices. The pool is unavailable for CID_COUNT clocks after reset.
+        always_ff @(posedge aclk) begin
+            if (aresetn) begin
+                if (!pool_ready[d]) free_fifo[init_ptr] <= init_ptr;
+                else if (return_cpl) free_fifo[write_ptr] <= cpl_cid;
             end
-            candidate_dev_C <= group_dev_C;
-            candidate_valid_C <= group_valid_C && (|free_groups_C);
-            candidate_cid_C <= {selected_group, free_indices_C[selected_group]};
         end
+
+        always_ff @(posedge aclk) begin
+            if (!aresetn || reset_device) begin
+                pool_ready[d] <= 1'b0;
+                init_ptr <= '0;
+                read_ptr <= '0;
+                write_ptr <= '0;
+                free_count[d] <= '0;
+                pool_head[d] <= '0;
+                recycled_valid[d] <= 1'b0;
+                recycled_cid[d] <= '0;
+            end else if (!pool_ready[d]) begin
+                init_ptr <= init_ptr + 1'b1;
+                if (init_ptr == NVME_QUEUE_BITS'(CID_COUNT-1)) begin
+                    pool_ready[d] <= 1'b1;
+                    free_count[d] <= (NVME_QUEUE_BITS+1)'(CID_COUNT);
+                end
+            end else begin
+                case ({return_cpl, fifo_pop})
+                    2'b10: free_count[d] <= free_count[d] + 1'b1;
+                    2'b01: free_count[d] <= free_count[d] - 1'b1;
+                    default: ;
+                endcase
+                if (return_cpl) write_ptr <= write_ptr + 1'b1;
+                if (fifo_pop) begin
+                    read_ptr <= next_read_ptr;
+                    if (free_count[d] > 1)
+                        pool_head[d] <= free_fifo[next_read_ptr];
+                    else if (return_cpl)
+                        pool_head[d] <= cpl_cid;
+                end else if (return_cpl && free_count[d] == 0)
+                    pool_head[d] <= cpl_cid;
+                if (allocate_device && recycled_valid[d]) recycled_valid[d] <= 1'b0;
+                if (return_abort) begin
+                    recycled_valid[d] <= 1'b1;
+                    recycled_cid[d] <= resolve_cid;
+                end
+            end
+        end
+
+        // Local per-device SQ/reservation updates; no variable-index RMW path.
+        always_ff @(posedge aclk) begin
+            if (!aresetn || reset_device) begin
+                sq_tail[d] <= '0;
+                sq_head[d] <= '0;
+                sq_reserved[d] <= 1'b0;
+                reserved_cid[d] <= '0;
+            end else begin
+                if (return_cpl && cpl_sq_head < CID_COUNT)
+                    sq_head[d] <= cpl_sq_head[NVME_QUEUE_BITS-1:0];
+                if (resolve_device) begin
+                    sq_reserved[d] <= 1'b0;
+                    if (!resolve_abort) sq_tail[d] <= sq_tail[d] + 1'b1;
+                end
+                if (allocate_device) begin
+                    sq_reserved[d] <= 1'b1;
+                    reserved_cid[d] <= candidate_cid_C;
+                end
+            end
+        end
+
+`ifndef SYNTHESIS
+        for (genvar c = 0; c < CID_COUNT; c++) begin : gen_owned_check
+            always_ff @(posedge aclk) begin
+                if (!aresetn || reset_device) cid_owned[d][c] <= 1'b0;
+                else if (allocate_device && candidate_cid_C == NVME_QUEUE_BITS'(c))
+                    cid_owned[d][c] <= 1'b1;
+                else if ((return_cpl && cpl_cid == NVME_QUEUE_BITS'(c)) ||
+                         (return_abort && resolve_cid == NVME_QUEUE_BITS'(c)))
+                    cid_owned[d][c] <= 1'b0;
+            end
+        end
+        always_ff @(posedge aclk) if (aresetn && pool_ready[d]) begin
+            assert (int'(free_count[d]) + int'(recycled_valid[d]) + $countones(cid_owned[d]) == CID_COUNT)
+                else $fatal(1, "CID pool conservation failed for device %0d", d);
+            if (allocate_device) assert (!cid_owned[d][candidate_cid_C] && !sq_reserved[d])
+                else $fatal(1, "CID double allocation");
+            if (return_cpl) assert (cid_owned[d][cpl_cid] &&
+                !(sq_reserved[d] && reserved_cid[d] == cpl_cid))
+                else $fatal(1, "Completion returned an unowned/unpublished CID");
+            if (return_abort) assert (cid_owned[d][resolve_cid] && !recycled_valid[d])
+                else $fatal(1, "Abort cache overflow or invalid CID");
+        end
+`endif
     end
 
 `ifndef SYNTHESIS
-    initial assert (NVME_QUEUE_BITS == 6)
-        else $fatal(1, "NVMe CID bitmap/encoder requires 64 command contexts");
+    initial begin
+        assert (NVME_QUEUE_BITS >= 6 && NVME_QUEUE_BITS <= 8);
+        assert (MAX_NVME_DEVICES >= 1 && MAX_NVME_DEVICES <= (1 << N_NVME_BITS));
+    end
 `endif
 
     integer i, j, k;
@@ -176,8 +253,12 @@ module nvme_info_table #(
             if (s_update_tbl.valid) begin
                 // Queue recreation is quiescent; SQHD alone cannot prove that
                 // the SSD has finished reading a live command's PRP storage.
-                s_update_tbl.ready = !s_update_tbl.data.reset_queue ||
-                    (cid_owned[s_update_tbl.data.dev_id] == '0);
+                // Inactive device writes are acknowledged and ignored.
+                s_update_tbl.ready = 1'b1;
+                if (s_update_tbl.data.dev_id < MAX_NVME_DEVICES && s_update_tbl.data.reset_queue)
+                    s_update_tbl.ready = pool_ready[s_update_tbl.data.dev_id] &&
+                        (free_count[s_update_tbl.data.dev_id] +
+                         (NVME_QUEUE_BITS+1)'(recycled_valid[s_update_tbl.data.dev_id]) == CID_COUNT);
             end
             else if (s_perm_update.valid) begin
                 s_perm_update.ready = 1'b1;
@@ -197,7 +278,8 @@ module nvme_info_table #(
                     rsp_N.error = NVME_NO_DEVICE;
                 end
                 // Permission check: region allowed for this device?
-                else if (!perm_table[s_tbl_req.data.region_id][s_tbl_req.data.dev_id].valid) begin
+                else if (s_tbl_req.data.region_id >= N_REGIONS ||
+                         !perm_table[s_tbl_req.data.region_id][s_tbl_req.data.dev_id].valid) begin
                     rsp_N.error = NVME_PERMISSION_DENIED;
                 end
                 // Permission check: offset + len within allowed range?
@@ -208,8 +290,7 @@ module nvme_info_table #(
                 // Both an SQ slot and an independently owned CID are needed.
                 else if (sq_reserved[s_tbl_req.data.dev_id] ||
                          next_sq_tail == sq_head[s_tbl_req.data.dev_id] ||
-                         !candidate_valid_C || candidate_dev_C != s_tbl_req.data.dev_id ||
-                         cid_owned[s_tbl_req.data.dev_id][candidate_cid_C]) begin
+                         !candidate_valid_C) begin
                     request_ready = 1'b0;
                 end
                 // Success path
@@ -239,11 +320,6 @@ module nvme_info_table #(
             rsp_cid_C   <= '0;
 
             for (i = 0; i < MAX_NVME_DEVICES; i++) begin
-                sq_tail[i] <= '0;
-                sq_head[i] <= '0;
-                cid_owned[i] <= '0;
-                sq_reserved[i] <= 1'b0;
-                reserved_cid[i] <= '0;
                 for (j = 0; j < MAX_NSID; j++) begin
                     nvme_info_tbl[i][j] <= '0;
                 end
@@ -258,51 +334,23 @@ module nvme_info_table #(
             rsp_C       <= rsp_N;
             rsp_valid_C <= rsp_valid_N;
 
-            // CQEs arrive here in CQ-ring order. SQHD frees only SQ entries;
-            // only this completed command loses CID/PRP ownership.
-            if (cpl_valid) begin
-                if (cpl_sq_head < 64)
-                    sq_head[cpl_dev] <= cpl_sq_head[NVME_QUEUE_BITS-1:0];
-                cid_owned[cpl_dev][cpl_cid] <= 1'b0;
-            end
-            if (resolve_valid && sq_reserved[resolve_dev] &&
-                reserved_cid[resolve_dev] == resolve_cid) begin
-                sq_reserved[resolve_dev] <= 1'b0;
-                if (resolve_abort)
-                    cid_owned[resolve_dev][resolve_cid] <= 1'b0;
-                else
-                    sq_tail[resolve_dev] <= sq_tail[resolve_dev] + 1'b1;
-            end
-
             // Update device info (highest priority)
-            if (s_update_tbl.valid && s_update_tbl.ready) begin
+            if (s_update_tbl.valid && s_update_tbl.ready &&
+                s_update_tbl.data.dev_id < MAX_NVME_DEVICES && s_update_tbl.data.nsid < MAX_NSID) begin
                 nvme_info_tbl[s_update_tbl.data.dev_id][s_update_tbl.data.nsid].lbaf       <= s_update_tbl.data.lbaf;
                 nvme_info_tbl[s_update_tbl.data.dev_id][s_update_tbl.data.nsid].nsze       <= s_update_tbl.data.nsze;
                 nvme_info_tbl[s_update_tbl.data.dev_id][s_update_tbl.data.nsid].valid      <= s_update_tbl.data.valid;
                 nvme_info_tbl[s_update_tbl.data.dev_id][s_update_tbl.data.nsid].sq_db_addr <= s_update_tbl.data.sq_db_addr;
 
-                if (s_update_tbl.data.reset_queue) begin
-                    sq_tail[s_update_tbl.data.dev_id] <= '0;
-                    sq_head[s_update_tbl.data.dev_id] <= '0;
-                    cid_owned[s_update_tbl.data.dev_id] <= '0;
-                    sq_reserved[s_update_tbl.data.dev_id] <= 1'b0;
-                end
             end
             // Update permission entry
-            else if (s_perm_update.valid && s_perm_update.ready) begin
+            else if (s_perm_update.valid && s_perm_update.ready &&
+                     s_perm_update.data.dev_id < MAX_NVME_DEVICES && s_perm_update.data.region_id < N_REGIONS) begin
                 perm_table[s_perm_update.data.region_id][s_perm_update.data.dev_id].lba_offset <= s_perm_update.data.lba_offset;
                 perm_table[s_perm_update.data.region_id][s_perm_update.data.dev_id].lba_size   <= s_perm_update.data.lba_size;
                 perm_table[s_perm_update.data.region_id][s_perm_update.data.dev_id].valid      <= 1'b1;
             end
-            // Reserve a free CID and the current unpublished SQ slot.
-            else if (s_tbl_req.valid && s_tbl_req.ready) begin
-                if (rsp_N.error == NVME_NO_ERROR) begin
-                    cid_owned[s_tbl_req.data.dev_id][candidate_cid_C] <= 1'b1;
-                    sq_reserved[s_tbl_req.data.dev_id] <= 1'b1;
-                    reserved_cid[s_tbl_req.data.dev_id] <= candidate_cid_C;
-                    rsp_cid_C <= candidate_cid_C;
-                end
-            end
+            if (allocate) rsp_cid_C <= candidate_cid_C;
         end
     end
 

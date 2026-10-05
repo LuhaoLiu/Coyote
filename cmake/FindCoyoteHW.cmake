@@ -164,6 +164,9 @@ set(EN_HOST_NETWORKING 0 CACHE STRING "Enable host networking")
 set(EN_NVME 0 CACHE STRING "Enable NVMe storage access")
 set(NVME_TYPE "HOST" CACHE STRING "NVMe connection type: HOST or PL")
 set_property(CACHE NVME_TYPE PROPERTY STRINGS HOST PL)
+set(NVME_QUEUE_DEPTH 64 CACHE STRING "NVMe I/O queue entries (64, 128, or 256); admin queues remain 64")
+set_property(CACHE NVME_QUEUE_DEPTH PROPERTY STRINGS 64 128 256)
+set(NVME_NUM_DEVICES 1 CACHE STRING "Number of NVMe device slots instantiated in the shell (HOST: 1..16, PL: 1); device IDs remain 4 bits")
 
 ##
 ## RECONFIGURATION
@@ -816,6 +819,13 @@ macro(validation_checks_hw)
 
     endif()
 
+    if(NOT NVME_QUEUE_DEPTH MATCHES "^(64|128|256)$")
+        message(FATAL_ERROR "NVME_QUEUE_DEPTH must be 64, 128, or 256")
+    endif()
+    if(NOT NVME_NUM_DEVICES MATCHES "^([1-9]|1[0-6])$")
+        message(FATAL_ERROR "NVME_NUM_DEVICES must be an integer from 1 to 16")
+    endif()
+
     # NVMe connection type. Keep both derived flags disabled when NVMe itself is disabled.
     set(EN_NVME_HOST 0)
     set(EN_NVME_PL 0)
@@ -827,6 +837,9 @@ macro(validation_checks_hw)
             endif()
             set(EN_NVME_HOST 1)
         elseif(NVME_TYPE STREQUAL "PL")
+            if(NOT NVME_NUM_DEVICES EQUAL 1)
+                message(FATAL_ERROR "NVME_TYPE=PL currently supports only one NVMe device; set NVME_NUM_DEVICES=1.")
+            endif()
             if(NOT (FDEV_NAME STREQUAL "v80" AND FPGA_ARCH STREQUAL "versal"))
                 message(FATAL_ERROR "NVME_TYPE=PL is supported only on the V80 (Versal) platform.")
             endif()

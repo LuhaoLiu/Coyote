@@ -318,15 +318,15 @@ always_ff @(posedge aclk) begin
     end
 end
 
-// cq_rsp is {device[3:0], assigned CID[5:0], local error[5:0]}.
+// cq_rsp is {device[15:12], CID[11:4], local error[3:0]} at every queue depth.
 // Successful assignments do not change completion/inflight counters. This
 // counting benchmark does not need a request-to-CID map.
 // Sticky local error capture; keep the existing zero-extended ERROR_REG format.
 always_ff @(posedge aclk) begin
     if (!aresetn)                                                last_error <= '0;
     else if (go_pulse)                                           last_error <= '0;
-    else if (s_nvme_cq_rsp.valid && s_nvme_cq_rsp.ready && s_nvme_cq_rsp.data[5:0] != 0)
-        last_error <= {10'b0, s_nvme_cq_rsp.data[5:0]};
+    else if (s_nvme_cq_rsp.valid && s_nvme_cq_rsp.ready && s_nvme_cq_rsp.data[NVME_RSP_ERROR_BITS-1:0] != 0)
+        last_error <= 16'(s_nvme_cq_rsp.data[NVME_RSP_ERROR_BITS-1:0]);
 end
 
 ///////////////////////////////////////
@@ -378,7 +378,7 @@ ila_perf_nvme inst_ila_perf_nvme (
     .probe10(bench_timer[31:0]),                                          // 32
     .probe11(last_error),                                                 // 16
     .probe12(s_nvme_cq_rsp.valid),                                        // 1
-    .probe13(s_nvme_cq_rsp.data),                                         // {device[3:0], CID[5:0], error[5:0]}
+    .probe13(s_nvme_cq_rsp.data),                                         // Packed device/CID/error; widths follow queue depth
     .probe14(latch_dev_mask[BENCH_MAX_DEVS-1:0]),                         // 4
     .probe15(go_pulse),                                                   // 1
 
@@ -399,7 +399,7 @@ ila_perf_nvme inst_ila_perf_nvme (
     // Completion-side detail: distinguish a real successful completion from
     // a wrong CID/device, an NVMe status error, or a missing handshake.
     .probe24(s_nvme_cpl.ready),                                           // 1
-    .probe25(s_nvme_cpl.data.cid),                                        // NVME_QUEUE_BITS = 6
+    .probe25(s_nvme_cpl.data.cid),                                        // NVME_RSP_CID_BITS = 8
     .probe26(s_nvme_cpl.data.status),                                     // 15
     .probe27(s_nvme_cpl.data.phase),                                      // 1
     .probe28(s_nvme_cq_rsp.ready),                                        // 1

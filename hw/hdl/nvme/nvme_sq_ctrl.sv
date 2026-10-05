@@ -34,6 +34,8 @@ import lynxTypes::*;
  * @brief   NVMe SQ controller
  *
  * Stores SQEs in BRAM (single AXI port for all devices) for SSD fetch.
+ * The SSD-visible SQ window is fixed for every queue depth: 16 KiB (256
+ * entries) per device, 256 KiB for 16 devices.
  */
 module nvme_sq_ctrl #(
     parameter int unsigned SQ_ADDR_BITS = 6,  // 64 entries per device
@@ -54,6 +56,7 @@ module nvme_sq_ctrl #(
 
     localparam int unsigned BRAM_BYTE_BITS  = 6;  // log2(512/8)
     localparam int unsigned BRAM_ADDR_WIDTH = ADDR_BITS + BRAM_BYTE_BITS;  // 16
+    localparam int unsigned SQ_DEV_STRIDE_BITS = 14;  // 16 KiB per device in the SSD window
 
     // Write port A (from s_sqe)
     logic                      a_en;
@@ -118,11 +121,20 @@ module nvme_sq_ctrl #(
 
     `AXI_ASSIGN_I2S(s_axi_nvme_sq, sq_bram)
 
+    // Compact {device, slot, byte} from the fixed 16-KiB-per-device window to
+    // the controller's MEM_DEPTH, which covers only the configured entries.
+    // The SSD never reads past the last entry of its ring.
+    function automatic logic [BRAM_ADDR_WIDTH-1:0] compact_addr(input logic [63:0] addr);
+        return {addr[SQ_DEV_STRIDE_BITS +: N_NVME_BITS],
+                addr[BRAM_BYTE_BITS +: SQ_ADDR_BITS],
+                addr[BRAM_BYTE_BITS-1:0]};
+    endfunction
+
     nvme_sq_axi_bram_ctrl inst_nvme_sq_bram_ctrl (
         .s_axi_aclk       (aclk),
         .s_axi_aresetn     (aresetn),
 
-        .s_axi_awaddr     (sq_bram_awaddr[BRAM_ADDR_WIDTH-1:0]),
+        .s_axi_awaddr     (compact_addr(sq_bram_awaddr)),
         .s_axi_awlen      (sq_bram_awlen),
         .s_axi_awsize     (sq_bram_awsize),
         .s_axi_awburst    (sq_bram_awburst),
@@ -142,7 +154,7 @@ module nvme_sq_ctrl #(
         .s_axi_bvalid     (sq_bram_bvalid),
         .s_axi_bready     (sq_bram_bready),
 
-        .s_axi_araddr     (sq_bram_araddr[BRAM_ADDR_WIDTH-1:0]),
+        .s_axi_araddr     (compact_addr(sq_bram_araddr)),
         .s_axi_arlen      (sq_bram_arlen),
         .s_axi_arsize     (sq_bram_arsize),
         .s_axi_arburst    (sq_bram_arburst),
@@ -168,9 +180,14 @@ module nvme_sq_ctrl #(
     );
 
     // byte address → entry index conversion
-    //   bram_addr_a = byte address from IP
+    //   bram_addr_a = compact byte address from IP
     //   b_addr      = entry index = bram_addr_a >> 6
     assign b_addr = bram_addr_a[BRAM_ADDR_WIDTH-1 : BRAM_BYTE_BITS];
+
+`ifndef SYNTHESIS
+    initial assert (SQ_ADDR_BITS <= SQ_DEV_STRIDE_BITS - BRAM_BYTE_BITS)
+        else $fatal(1, "nvme_sq_ctrl: SQ must fit the fixed 16-KiB per-device stride");
+`endif
 
     // Register the read slot for debug alongside b_data_out
     logic [ADDR_BITS-1:0] b_addr_q1;

@@ -373,9 +373,10 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_u
 
   # Host-connected NVMe BAR address segments (must match driver-side AXI BRAM controller MEM_DEPTHs).
   if {$cnfg(en_nvme_host) eq 1} {
-    create_bd_addr_seg -range 0x00010000 -offset 0x04010000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_sq/Reg]   SEG_axi_nvme_sq_Reg
+    # Fixed for every queue depth (sized for 256 entries): SQ 16 KiB, CQ 4 KiB, PRP 1 MiB per device.
+    create_bd_addr_seg -range 0x00040000 -offset 0x04040000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_sq/Reg]   SEG_axi_nvme_sq_Reg
     create_bd_addr_seg -range 0x00010000 -offset 0x04020000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_cq/Reg]   SEG_axi_nvme_cq_Reg
-    create_bd_addr_seg -range 0x00400000 -offset 0x04800000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_prp/Reg]  SEG_axi_nvme_prp_Reg
+    create_bd_addr_seg -range 0x01000000 -offset 0x05000000 [get_bd_addr_spaces /axi_main] [get_bd_addr_segs axi_nvme_prp/Reg]  SEG_axi_nvme_prp_Reg
 
     if {$cnfg(en_mem) eq 1} {
       # axi_card_mem: 256MB..16GB in power-of-two aligned segments

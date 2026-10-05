@@ -117,6 +117,19 @@ int read_shell_config(struct bus_driver_data *data) {
 
     data->en_nvme = (data->shell_cnfg->nvme_cnfg & EN_NVME_MASK) >> EN_NVME_SHIFT;
     data->nvme_type = (data->shell_cnfg->nvme_cnfg & NVME_TYPE_MASK) >> NVME_TYPE_SHIFT;
+    data->nvme_queue_depth = (data->shell_cnfg->nvme_cnfg & NVME_QUEUE_DEPTH_MASK) >> NVME_QUEUE_DEPTH_SHIFT;
+    if (data->en_nvme && data->nvme_queue_depth != 64 &&
+        data->nvme_queue_depth != 128 && data->nvme_queue_depth != 256) {
+        pr_err("unsupported NVMe queue depth %u in shell CSR\n", data->nvme_queue_depth);
+        return -EINVAL;
+    }
+    dbg_info("NVMe I/O queue depth %u\n", data->nvme_queue_depth);
+    data->nvme_num_devices = (data->shell_cnfg->nvme_cnfg & NVME_NUM_DEVICES_MASK) >> NVME_NUM_DEVICES_SHIFT;
+    if (data->en_nvme && (!data->nvme_num_devices || data->nvme_num_devices > MAX_NVME_DEVICES)) {
+        pr_err("unsupported NVMe device count %u in shell CSR\n", data->nvme_num_devices);
+        return -EINVAL;
+    }
+    dbg_info("NVMe device capacity %u\n", data->nvme_num_devices);
     dbg_info("enabled NVMe %d, type %s\n", data->en_nvme,
              data->nvme_type == COYOTE_NVME_TYPE_PL ? "PL-connected" : "host-connected");
 

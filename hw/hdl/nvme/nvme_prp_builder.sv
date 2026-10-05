@@ -54,6 +54,10 @@ module nvme_prp_builder #(
     input  logic [63:0] FPGA_PRP_BAR_BASE
 );
 
+    // PRP-list window: one 4-KiB page per CID and a fixed 1-MiB stride per
+    // device (256 pages), whatever the configured queue depth.
+    localparam int unsigned PRP_DEV_STRIDE_BITS = 20;
+
 `ifdef EN_NVME_PL
     // PG344 programs a 16-TiB inbound Root-Port aperture at this PCIe base and
     // removes the base again before axi_nvme_card. Consequently, adding this value
@@ -68,10 +72,10 @@ module nvme_prp_builder #(
     localparam logic [63:0] PL_HOST_ROUTE_BASE =
         64'h0000_0400_0000_0000;
 
-    // SSD-visible address of the PRP-list window. PG344 translates it to the
-    // BD-local axi_nvme_prp segment at 0x0FFF_F480_0000.
+    // SSD-visible address of the 16-MiB PRP-list window. PG344 translates it
+    // to the BD-local axi_nvme_prp segment at 0x0FFF_F500_0000.
     localparam logic [63:0] PL_PRP_PCIE_BASE =
-        64'h0000_1FFF_F480_0000;
+        64'h0000_1FFF_F500_0000;
 
     function automatic logic [63:0] pl_extend_paddr(
         input logic [PADDR_BITS-1:0] paddr
@@ -276,13 +280,16 @@ module nvme_prp_builder #(
                         prp_rsp_N.prp2 = PL_PRP_PCIE_BASE
                                        + ({{(64-N_NVME_BITS){1'b0}},
                                             prp_req_C.dev_id}
-                                          << (NVME_QUEUE_BITS + 12))
+                                          << PRP_DEV_STRIDE_BITS)
                                        + ({{(64-NVME_QUEUE_BITS){1'b0}},
                                             prp_req_C.sq_tail} << 12);
 `else
                         prp_rsp_N.prp2 = FPGA_PRP_BAR_BASE
-                                       + (prp_req_C.dev_id  << (NVME_QUEUE_BITS + 12))
-                                       + (prp_req_C.sq_tail << 12);
+                                       + ({{(64-N_NVME_BITS){1'b0}},
+                                            prp_req_C.dev_id}
+                                          << PRP_DEV_STRIDE_BITS)
+                                       + ({{(64-NVME_QUEUE_BITS){1'b0}},
+                                            prp_req_C.sq_tail} << 12);
 `endif
 
                         // Prepare first write entry

@@ -65,7 +65,8 @@ module pl_pcie_nvme_top_wrapper #(
 
     parameter [63:0] KNOWN_CAP = 64'h1800_C030_1E02_3FFF,
     parameter [31:0] KNOWN_VS = 32'h0002_0000,
-    parameter QUEUE_DEPTH = 64,
+    parameter QUEUE_DEPTH = 64, // Admin queues
+    parameter IO_QUEUE_DEPTH = 64,
     parameter READY_TIMEOUT_POLLS = 1000000,
     parameter CQ_TIMEOUT_POLLS = 1000000,
     parameter [31:0] NVME_NSID = 32'd1,
@@ -75,7 +76,7 @@ module pl_pcie_nvme_top_wrapper #(
         // RP_DMA_PCIE_BASE + RP_DMA_EXPECTED_SIZE - 64'h2000,
     parameter [63:0] ADMIN_CQ_PCIE_ADDR = 64'h0000_1FFF_FFFF_F000,
         // RP_DMA_PCIE_BASE + RP_DMA_EXPECTED_SIZE - 64'h1000,
-    parameter [63:0] IO_SQ_PCIE_ADDR = 64'h0000_1FFF_F401_0000,
+    parameter [63:0] IO_SQ_PCIE_ADDR = 64'h0000_1FFF_F404_0000, // Fixed for every depth: 16 KiB per device
     parameter [63:0] IO_CQ_PCIE_ADDR = 64'h0000_1FFF_F402_0000,
     // Keep all ports present; production builds disable optional diagnostics.
     parameter ENABLE_SETUP_DEBUG = 1'b0
@@ -577,6 +578,7 @@ module pl_pcie_nvme_top_wrapper #(
         .KNOWN_CAP(KNOWN_CAP),
         .KNOWN_VS(KNOWN_VS),
         .QUEUE_DEPTH(QUEUE_DEPTH),
+        .IO_QUEUE_DEPTH(IO_QUEUE_DEPTH),
         .READY_TIMEOUT_POLLS(READY_TIMEOUT_POLLS),
         .CQ_TIMEOUT_POLLS(CQ_TIMEOUT_POLLS),
         .NVME_NSID(NVME_NSID),

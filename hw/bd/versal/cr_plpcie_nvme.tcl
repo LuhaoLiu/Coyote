@@ -980,6 +980,7 @@ proc cr_bd_design_plnvme { parentCell } {
    }
   # Request 512-byte MPS, bounded at run time
   # by the endpoint capability discovered by the enumeration FSM.
+  set_property CONFIG.IO_QUEUE_DEPTH $cnfg(nvme_queue_depth) $pl_pcie_nvme_top_wra_0
   set_property CONFIG.PCIE_TARGET_MPS {2} $pl_pcie_nvme_top_wra_0
   set_property CONFIG.ENABLE_SETUP_DEBUG $en_plnvme_debug $pl_pcie_nvme_top_wra_0
 
@@ -1489,6 +1490,9 @@ proc cr_bd_design_plnvme { parentCell } {
   connect_bd_net -net xpm_cdc_gen_2_dest_out  [get_bd_pins xpm_cdc_gen_2/dest_out] \
   [get_bd_pins pl_pcie_nvme_top_wra_0/csr_prog_done]
 
+  # Fixed windows for 16 device IDs and up to 256 entries, whatever the
+  # configured depth: SQ 16 KiB/device, CQ 4 KiB/device, PRP 1 MiB/device.
+  # Bases must align to the full window: BRAM controllers use low address bits.
   # Create address segments
   assign_bd_address -offset 0x100000000000 -range 0x100000000000 -target_address_space [get_bd_addr_spaces pl_pcie_nvme_top_wra_0/m_axi_mmio] [get_bd_addr_segs qdma_0/S_AXI_BRIDGE/BAR0] -force
   assign_bd_address -offset 0x80000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces pl_pcie_nvme_top_wra_0/m_axi_mmio] [get_bd_addr_segs qdma_0/S_AXI_BRIDGE/BAR1] -force
@@ -1497,8 +1501,8 @@ proc cr_bd_design_plnvme { parentCell } {
   assign_bd_address -offset 0x00000000 -range 0x040000000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_card/Reg] -force
   assign_bd_address -offset 0x0FFFF4020000 -range 0x00010000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_cq/Reg] -force
   assign_bd_address -offset 0x040000000000 -range 0x040000000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_host/Reg] -force
-  assign_bd_address -offset 0x0FFFF4800000 -range 0x00400000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_prp/Reg] -force
-  assign_bd_address -offset 0x0FFFF4010000 -range 0x00010000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_sq/Reg] -force
+  assign_bd_address -offset 0x0FFFF5000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_prp/Reg] -force
+  assign_bd_address -offset 0x0FFFF4040000 -range 0x00040000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_sq/Reg] -force
   assign_bd_address -offset 0x0FFFFFFFC000 -range 0x00004000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs pl_pcie_nvme_top_wra_0/s_axi_dma/reg0] -force
   assign_bd_address -offset 0x100000000000 -range 0x100000000000 -target_address_space [get_bd_addr_spaces axi_nvme_mmio] [get_bd_addr_segs qdma_0/S_AXI_BRIDGE/BAR0] -force
   assign_bd_address -offset 0x80000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces axi_nvme_mmio] [get_bd_addr_segs qdma_0/S_AXI_BRIDGE/BAR1] -force

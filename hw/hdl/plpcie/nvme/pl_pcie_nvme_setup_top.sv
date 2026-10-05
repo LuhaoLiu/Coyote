@@ -61,7 +61,8 @@ module pl_pcie_nvme_setup_top #(
 
     parameter logic [63:0] KNOWN_CAP = 64'h1800_C030_1E02_3FFF,
     parameter logic [31:0] KNOWN_VS  = 32'h0002_0000,
-    parameter integer QUEUE_DEPTH = 64,
+    parameter integer QUEUE_DEPTH = 64, // Admin queues remain in 4 KiB pages.
+    parameter integer IO_QUEUE_DEPTH = 64,
     parameter integer READY_TIMEOUT_POLLS = 1_000_000,
     parameter integer CQ_TIMEOUT_POLLS    = 1_000_000,
     parameter logic [31:0] NVME_NSID      = 32'd1,
@@ -72,7 +73,7 @@ module pl_pcie_nvme_setup_top #(
     parameter logic [63:0] ADMIN_CQ_PCIE_ADDR =
         RP_DMA_PCIE_BASE + RP_DMA_PCIE_SIZE - 64'h1000,
     parameter logic [63:0] IO_SQ_PCIE_ADDR =
-        64'h0000_1FFF_F401_0000,
+        64'h0000_1FFF_F404_0000, // Fixed for every depth: 16 KiB per device
     parameter logic [63:0] IO_CQ_PCIE_ADDR =
         64'h0000_1FFF_F402_0000,
     parameter bit ENABLE_SETUP_DEBUG = 1'b0
@@ -310,6 +311,7 @@ module pl_pcie_nvme_setup_top #(
         .KNOWN_CAP(KNOWN_CAP),
         .KNOWN_VS(KNOWN_VS),
         .QUEUE_DEPTH(QUEUE_DEPTH),
+        .IO_QUEUE_DEPTH(IO_QUEUE_DEPTH),
         .DISCOVERY_PCIE_ADDR(DISCOVERY_PCIE_ADDR),
         .ADMIN_SQ_PCIE_ADDR(ADMIN_SQ_PCIE_ADDR),
         .ADMIN_CQ_PCIE_ADDR(ADMIN_CQ_PCIE_ADDR),

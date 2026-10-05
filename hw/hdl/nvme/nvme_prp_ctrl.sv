@@ -37,7 +37,7 @@ import lynxTypes::*;
  * Stores PRP-list entries in BRAM and serves them to the SSD over the AXI port.
  */
 module nvme_prp_ctrl #(
-    parameter integer NVME_QUEUE_BITS = lynxTypes::NVME_QUEUE_BITS,  // Default: 6 (64 entries)
+    parameter integer NVME_QUEUE_BITS = lynxTypes::NVME_QUEUE_BITS,  // Configured 64, 128, or 256 entries
     parameter integer PRP_ADDR_BITS   = lynxTypes::PRP_ADDR_BITS,    // Default: 5 (32 entries, 128KB max)
     parameter integer N_NVME_BITS     = lynxTypes::N_NVME_BITS,      // Default: 2 (4 devices)
     parameter integer PRP_AXI_OFFSET  = 0                             // BD residual offset (0 when base is EXT_ADDR_WIDTH-aligned)
@@ -60,9 +60,12 @@ module nvme_prp_ctrl #(
     localparam integer unsigned BRAM_BYTE_BITS  = $clog2(PRP_DATA_BYTES);         // = 3
 
     // External: NVMe spec requires PRP list to be 4KB page-aligned
-    // Each queue occupies 4KB in BAR space, but only PRP_ADDR_BITS entries used internally
+    // Each CID owns one 4KB page in BAR space, but only PRP_ADDR_BITS entries are stored.
+    // Each device owns a fixed 1MB stride (256 pages) whatever the configured depth.
     localparam integer unsigned EXT_PAGE_BITS   = 12;                             // 4KB page
-    localparam integer unsigned EXT_ADDR_WIDTH  = N_NVME_BITS + NVME_QUEUE_BITS + EXT_PAGE_BITS;
+    localparam integer unsigned EXT_DEV_STRIDE_BITS = 8 + EXT_PAGE_BITS;          // 1MB per device
+    localparam integer unsigned EXT_ADDR_WIDTH  = N_NVME_BITS + EXT_DEV_STRIDE_BITS;
+    localparam integer unsigned RAM_ADDR_WIDTH = ADDR_BITS + BRAM_BYTE_BITS;
 
     // Internal Signals
 
@@ -74,7 +77,7 @@ module nvme_prp_ctrl #(
 
     // Read port B (from AXI BRAM controller)
     logic                      bram_en_a;
-    logic [EXT_ADDR_WIDTH-1:0] bram_addr_a;      // Full external byte address from AXI BRAM ctrl
+    logic [RAM_ADDR_WIDTH-1:0] bram_addr_a;      // Compact byte address from AXI BRAM ctrl
     logic [ADDR_BITS-1:0]      b_addr;           // Entry index into RAM
     logic [63:0]               b_data_out;
 
@@ -128,11 +131,28 @@ module nvme_prp_ctrl #(
 
     `AXI_ASSIGN_I2S(s_axi_nvme_prp, prp_bram)
 
+    // Compact the sparse 4-KiB pages before the AXI BRAM controller. Its
+    // MEM_DEPTH/AXI address width must describe physical storage, not the much
+    // larger SSD aperture. Valid PRP-list bursts stay within the 32 entries
+    // stored per page (the maximum supported command is 128 KiB).
+    function automatic logic [RAM_ADDR_WIDTH-1:0] compact_addr(input logic [63:0] addr);
+        logic [EXT_ADDR_WIDTH-1:0] clean;
+        clean = addr[EXT_ADDR_WIDTH-1:0] - EXT_ADDR_WIDTH'(PRP_AXI_OFFSET);
+        return {clean[EXT_DEV_STRIDE_BITS +: N_NVME_BITS],
+                clean[EXT_PAGE_BITS +: NVME_QUEUE_BITS],
+                clean[PRP_ADDR_BITS+BRAM_BYTE_BITS-1:0]};
+    endfunction
+
+`ifndef SYNTHESIS
+    initial assert (NVME_QUEUE_BITS <= EXT_DEV_STRIDE_BITS - EXT_PAGE_BITS)
+        else $fatal(1, "nvme_prp_ctrl: PRP lists must fit the fixed 1-MiB per-device stride");
+`endif
+
     nvme_prp_axi_bram_ctrl inst_nvme_prp_bram_ctrl (
         .s_axi_aclk       (aclk),
         .s_axi_aresetn    (aresetn),
 
-        .s_axi_awaddr     (prp_bram_awaddr[EXT_ADDR_WIDTH-1:0]),
+        .s_axi_awaddr     (compact_addr(prp_bram_awaddr)),
         .s_axi_awlen      (prp_bram_awlen),
         .s_axi_awsize     (prp_bram_awsize),
         .s_axi_awburst    (prp_bram_awburst),
@@ -152,7 +172,7 @@ module nvme_prp_ctrl #(
         .s_axi_bvalid     (prp_bram_bvalid),
         .s_axi_bready     (prp_bram_bready),
 
-        .s_axi_araddr     (prp_bram_araddr[EXT_ADDR_WIDTH-1:0]),
+        .s_axi_araddr     (compact_addr(prp_bram_araddr)),
         .s_axi_arlen      (prp_bram_arlen),
         .s_axi_arsize     (prp_bram_arsize),
         .s_axi_arburst    (prp_bram_arburst),
@@ -177,22 +197,8 @@ module nvme_prp_ctrl #(
         .bram_we_a        ()
     );
 
-    // Address remapping: external 4KB page → internal PRP_ADDR_BITS entries
-    //
-    // BD interconnect does not translate addresses, so the full offset appears.
-    // leaving a residual offset (PRP_AXI_OFFSET) in the slave address.
-    // Subtract it before extracting {dev_id, sq_tail, entry_idx}.
-    //
-    // Clean byte addr: [EXT-1 : PAGE] = dev_id + sq_tail
-    //                  [PAGE-1 : PRP+BYTE] = unused (always 0)
-    //                  [PRP+BYTE-1 : BYTE] = entry_idx
-    //                  [BYTE-1 : 0] = byte offset
-    // Internal BRAM addr: {dev_id, sq_tail, entry_idx}
-    logic [EXT_ADDR_WIDTH-1:0] bram_addr_clean;
-    assign bram_addr_clean = bram_addr_a - PRP_AXI_OFFSET[EXT_ADDR_WIDTH-1:0];
-
-    assign b_addr = {bram_addr_clean[EXT_ADDR_WIDTH-1 : EXT_PAGE_BITS],
-                     bram_addr_clean[PRP_ADDR_BITS+BRAM_BYTE_BITS-1 : BRAM_BYTE_BITS]};
+    // The controller now increments compact byte addresses within each list.
+    assign b_addr = bram_addr_a[RAM_ADDR_WIDTH-1:BRAM_BYTE_BITS];
 
     // Read data: direct connection (64-bit AXI ↔ 64-bit BRAM)
     assign bram_rddata_wire = b_data_out;
@@ -234,7 +240,7 @@ module nvme_prp_ctrl #(
         .probe6 (a_data_in[31:0]),                      // 32
         // Read port (from AXI BRAM ctrl — NVMe device reads)
         .probe7 (bram_en_a),                            // 1
-        .probe8 (bram_addr_a),                          // EXT_ADDR_WIDTH
+        .probe8 (bram_addr_a),                          // RAM_ADDR_WIDTH
         .probe9 (b_addr),                               // ADDR_BITS
         .probe10(b_data_out[31:0]),                     // 32
         .probe11(b_data_out[63:32]),                    // 32

@@ -43,7 +43,7 @@ module nvme_top (
 
     // Per-region user interfaces (req_t with strm=STRM_NVME)
     metaIntf.s          s_nvme_user_req [N_REGIONS],  // req_t
-    metaIntf.m          m_nvme_user_rsp [N_REGIONS],  // [15:12] device, [11:6] CID, [5:0] error
+    metaIntf.m          m_nvme_user_rsp [N_REGIONS],  // device[15:12], CID[11:4], local error[3:0]
     metaIntf.m          m_nvme_cpl      [N_REGIONS],  // nvme_cqe_t
 
     // MMU interface (req_t with strm=STRM_NVME → bpss_rd_sq path)
@@ -78,8 +78,9 @@ module nvme_top (
 );
 
     // Constants
-    localparam logic [63:0] PRP_OFFSET = 64'h0480_0000;
-    localparam int unsigned N_NVME     = (1 << N_NVME_BITS);
+    // Fixed 16-MiB PRP-list window (1 MiB per device) for every queue depth.
+    localparam logic [63:0] PRP_OFFSET = 64'h0500_0000;
+    localparam int unsigned N_NVME     = NVME_NUM_DEVICES;
 `ifdef EN_NVME_PL
     // design_plnvme creates I/O queue 1 and currently assumes CAP.DSTRD=0, hence
     // four-byte doorbell spacing: SQ1=BAR+0x1008 and CQ1=BAR+0x100c.
@@ -122,6 +123,9 @@ module nvme_top (
     metaIntf #(.STYPE(nvme_cmd_dispatched_t))      cmd_dispatched        ();
     metaIntf #(.STYPE(nvme_sqe_t))      sqe_strm      ();
     metaIntf #(.STYPE(nvme_cqe_t))         cqe_strm      ();
+    // nvme_cqe_t carries an 8-bit CID; per-CID tables use the configured depth.
+    logic [NVME_QUEUE_BITS-1:0]            cqe_cid;
+    assign cqe_cid = cqe_strm.data.cid[NVME_QUEUE_BITS-1:0];
 
     metaIntf #(.STYPE(sq_db_req_t))        sq_db_strm    ();
     metaIntf #(.STYPE(update_tbl_t))       update_tbl    ();
@@ -136,6 +140,9 @@ module nvme_top (
     logic prp_fault, abort_valid;
     logic [N_NVME_BITS-1:0] abort_dev;
     logic queue_reset, cq_reset_ready, db_reset_ready;
+`ifdef EN_NVME_PL
+    logic pl_db_idle;
+`endif
     logic cqe_owned, cqe_fire, cqe_release, cqe_cid_in_range;
     logic [15:0] cqe_sq_head;
 
@@ -146,7 +153,8 @@ module nvme_top (
     assign update_tbl_int.data = update_tbl.data;
     assign update_tbl.ready = update_tbl_int.ready &&
         (!update_tbl.data.reset_queue || (cq_reset_ready && db_reset_ready));
-    assign queue_reset = update_tbl.valid && update_tbl.ready && update_tbl.data.reset_queue;
+    assign queue_reset = update_tbl.valid && update_tbl.ready && update_tbl.data.reset_queue &&
+                         update_tbl.data.dev_id < N_NVME;
     assign cq_head_upd.ready = 1'b1; // CQ acknowledgement no longer grants SQ space.
 
     dmaIntf sq_dma_req ();
@@ -175,8 +183,9 @@ module nvme_top (
 `endif
 
 `ifdef EN_NVME_PL
-    // This writer accepts requests only after the previous AXI B response.
-    assign db_reset_ready = pl_db_dma_req.ready && !pl_db_dma_req.valid;
+    // READY can be high with older writes outstanding. Reset must drain all B
+    // responses and exclude a new request accepted on the reset edge.
+    assign db_reset_ready = pl_db_idle && !pl_db_dma_req.valid;
 `else
     // Host queue recreation already requires the host DMA path to be drained.
     assign db_reset_ready = 1'b1;
@@ -190,7 +199,7 @@ module nvme_top (
             for (int d = 0; d < N_NVME; d++)
                 sq_db_addr_tbl[d] <= '0;
         end
-        else if (update_tbl.valid && update_tbl.ready) begin
+        else if (update_tbl.valid && update_tbl.ready && update_tbl.data.dev_id < N_NVME) begin
             sq_db_addr_tbl[update_tbl.data.dev_id] <= update_tbl.data.sq_db_addr;
         end
     end
@@ -204,7 +213,8 @@ module nvme_top (
 
     for (genvar i = 0; i < N_REGIONS; i++) begin : gen_user_req_cred
         wire cred_ok =
-            credit_cnt[i][s_nvme_user_req[i].data.dev_id] < NVME_N_OUTSTANDING
+            ((s_nvme_user_req[i].data.dev_id >= N_NVME) ? 1'b1 :
+             (credit_cnt[i][s_nvme_user_req[i].data.dev_id] < NVME_N_OUTSTANDING))
 `ifdef EN_NVME_PL
             && nvme_pl_ready
 `endif
@@ -254,23 +264,33 @@ module nvme_top (
     // CID owns the region independently of the SQ slot. Mark it completable
     // only once its SQE is stored. Once routed into a region FIFO, the packet
     // no longer depends on the CID map, so that CID/PRP slot can be reused.
-    always_ff @(posedge aclk) begin
-        if (!aresetn) begin
-            for (int d = 0; d < N_NVME; d++) cid_live[d] <= '0;
-        end else begin
-            if (cmd_dispatched.valid && cmd_dispatched.ready && cmd_error == 0)
-                cid_region[cmd_dispatched.data.dev_id][cmd_cid] <= cmd_dispatched.data.vfid;
-            if (cqe_release) cid_live[cqe_strm.data.dev_id][cqe_strm.data.cid] <= 1'b0;
-            if (sqe_strm.valid && sqe_strm.ready) cid_live[sqe_strm.data.dev_id][sqe_cid] <= 1'b1;
-            if (queue_reset) cid_live[update_tbl.data.dev_id] <= '0;
+    for (genvar d = 0; d < N_NVME; d++) begin : gen_cid_device
+        wire store_region = cmd_dispatched.valid && cmd_dispatched.ready && cmd_error == 0 &&
+                            cmd_dispatched.data.dev_id == N_NVME_BITS'(d);
+        wire publish_device = sqe_strm.valid && sqe_strm.ready &&
+                              sqe_strm.data.dev_id == N_NVME_BITS'(d);
+        wire retire_device = cqe_release && cqe_strm.data.dev_id == N_NVME_BITS'(d);
+        wire reset_device = queue_reset && update_tbl.data.dev_id == N_NVME_BITS'(d);
+        // Keep the single-write region map eligible for RAM inference.
+        always_ff @(posedge aclk)
+            if (aresetn && store_region) cid_region[d][cmd_cid] <= cmd_dispatched.data.vfid;
+        for (genvar c = 0; c < (1 << NVME_QUEUE_BITS); c++) begin : gen_cid
+            // Constant indices make feedback local. Preserve reset > set > clear.
+            always_ff @(posedge aclk) begin
+                if (!aresetn || reset_device) cid_live[d][c] <= 1'b0;
+                else if (publish_device && sqe_cid == NVME_QUEUE_BITS'(c)) cid_live[d][c] <= 1'b1;
+                else if (retire_device && cqe_cid == NVME_QUEUE_BITS'(c)) cid_live[d][c] <= 1'b0;
+            end
         end
     end
 
     // Completion routing: cqe → owning region (via CID map) → per-region FIFO
     metaIntf #(.STYPE(nvme_cqe_t)) cpl_fin [N_REGIONS] ();
     logic [N_REGIONS-1:0] cpl_fin_rdy;
-    wire [N_REGIONS_BITS-1:0] cpl_region = cid_region[cqe_strm.data.dev_id][cqe_strm.data.cid];
-    assign cqe_owned = cqe_cid_in_range && cid_live[cqe_strm.data.dev_id][cqe_strm.data.cid];
+    wire [N_REGIONS_BITS-1:0] cpl_region = (cqe_strm.data.dev_id < N_NVME) ?
+        cid_region[cqe_strm.data.dev_id][cqe_cid] : '0;
+    assign cqe_owned = (cqe_strm.data.dev_id < N_NVME) ?
+        cqe_cid_in_range && cid_live[cqe_strm.data.dev_id][cqe_cid] : 1'b0;
     assign cqe_fire = cqe_strm.valid && cqe_strm.ready;
     assign cqe_release = cqe_fire && cqe_owned;
 
@@ -304,7 +324,7 @@ module nvme_top (
         // Successful CID assignment is not command completion and returns no
         // outstanding credit. Only a terminal local error does so here.
         assign rsp_pop[i] = rsp_out[i].valid && rsp_out[i].ready &&
-                            (rsp_out[i].data.error[5:0] != 0);
+                            (rsp_out[i].data.error[NVME_RSP_ERROR_BITS-1:0] != 0);
         assign rsp_dev[i] = rsp_out[i].data.dev_id;
     end
     assign user_rsp_pre.ready = rsp_fin_rdy[rsp_region];
@@ -351,7 +371,7 @@ module nvme_top (
         .alloc_cid      (alloc_cid),
         .cpl_valid      (cqe_release),
         .cpl_dev        (cqe_strm.data.dev_id),
-        .cpl_cid        (cqe_strm.data.cid),
+        .cpl_cid        (cqe_cid),
         .cpl_sq_head    (cqe_sq_head),
         .resolve_valid (abort_valid || (sqe_strm.valid && sqe_strm.ready)),
         .resolve_abort (abort_valid),
@@ -481,8 +501,8 @@ module nvme_top (
     nvme_cq_head_tracker #(
         .NVME_QUEUE_BITS (NVME_QUEUE_BITS),
         .N_NVME_BITS     (N_NVME_BITS),
-        .BATCH_SIZE      (4),
-        .TIMEOUT_CYCLES  (80)
+        .BATCH_SIZE      (NVME_PL_FLOW ? ((NVME_QUEUE_DEPTH == 64) ? 16 : 32) : 4),
+        .TIMEOUT_CYCLES  (NVME_PL_FLOW ? 1000 : 80)
     ) inst_cq_head_tracker (
         .aclk            (aclk),
         .aresetn         (aresetn),
@@ -535,7 +555,8 @@ module nvme_top (
         .setup_done    (nvme_pl_ready),
         .s_dma_req     (pl_db_dma_req),
         .s_axis_data   (pl_db_dma_data),
-        .m_axi_mmio    (m_axi_nvme_mmio)
+        .m_axi_mmio    (m_axi_nvme_mmio),
+        .idle          (pl_db_idle)
     );
 `endif
 

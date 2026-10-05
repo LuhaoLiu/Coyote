@@ -39,7 +39,8 @@ module nvme_cq_head_tracker #(
     parameter int unsigned NVME_QUEUE_BITS = 6,
     parameter int unsigned N_NVME_BITS     = 4,
     parameter int unsigned BATCH_SIZE      = 4,
-    parameter int unsigned TIMEOUT_CYCLES  = 80
+    parameter int unsigned TIMEOUT_CYCLES  = 80,
+    parameter int unsigned NUM_DEVICES = NVME_NUM_DEVICES
 )(
     input  logic        aclk,
     input  logic        aresetn,
@@ -59,13 +60,18 @@ module nvme_cq_head_tracker #(
     AXI4S.m             m_cq_dma_data,
 
     // Config: per-device SQ doorbell addresses (CQ doorbell = SQ + 4)
-    input  logic [63:0] sq_db_addr_tbl [(1 << N_NVME_BITS)]
+    input  logic [63:0] sq_db_addr_tbl [NUM_DEVICES]
 );
 
     localparam int unsigned CQ_DEPTH     = (1 << NVME_QUEUE_BITS);
-    localparam int unsigned N_NVME       = (1 << N_NVME_BITS);
+    localparam int unsigned N_NVME       = NUM_DEVICES;
     localparam int unsigned TIMER_BITS   = $clog2(TIMEOUT_CYCLES + 1);
     localparam logic [63:0] CQ_DB_OFFSET = 64'd4;
+
+`ifndef SYNTHESIS
+    initial assert (NUM_DEVICES >= 1 && NUM_DEVICES <= (1 << N_NVME_BITS))
+        else $fatal(1, "NVMe device capacity must fit the public device ID");
+`endif
 
     // Per-device state
     // Extra wrap bit distinguishes a full CQ of consumed entries from none.
@@ -130,7 +136,7 @@ module nvme_cq_head_tracker #(
                     state_N = ST_SEND_DMA_REQ;
                 end else begin
                     // Move to next device
-                    scan_dev_N = scan_dev_C + 1'b1;
+                    scan_dev_N = (scan_dev_C == N_NVME_BITS'(N_NVME-1)) ? '0 : scan_dev_C + 1'b1;
                 end
             end
 
@@ -151,7 +157,7 @@ module nvme_cq_head_tracker #(
 
                 if (m_cq_head_update.ready) begin
                     // Move to next device after servicing
-                    scan_dev_N = scan_dev_C + 1'b1;
+                    scan_dev_N = (scan_dev_C == N_NVME_BITS'(N_NVME-1)) ? '0 : scan_dev_C + 1'b1;
                     state_N    = ST_SCAN;
                 end
             end
@@ -184,7 +190,7 @@ module nvme_cq_head_tracker #(
                     ((pending_count >= CQ_DEPTH) ? (NVME_QUEUE_BITS+1)'(CQ_DEPTH-1) : pending_count);
 
             // Advance internal_head on each CQE
-            if (cqe_valid) begin
+            if (cqe_valid && cqe_dev_id < N_NVME) begin
                 internal_head[cqe_dev_id] <= internal_head[cqe_dev_id] + 1'b1;
             end
 
@@ -205,7 +211,7 @@ module nvme_cq_head_tracker #(
             end
 
             // Queue recreation is accepted only at an idle transaction boundary.
-            if (queue_reset) begin
+            if (queue_reset && queue_reset_dev < N_NVME) begin
                 internal_head[queue_reset_dev] <= '0;
                 external_head[queue_reset_dev] <= '0;
                 timer[queue_reset_dev] <= '0;

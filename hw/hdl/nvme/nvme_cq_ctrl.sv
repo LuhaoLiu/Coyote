@@ -39,7 +39,8 @@ import lynxTypes::*;
 module nvme_cq_ctrl #(
     parameter int unsigned CQ_ADDR_BITS = 6,
     parameter int unsigned N_NVME_BITS  = lynxTypes::N_NVME_BITS,
-    parameter int unsigned READ_LATENCY = 2
+    parameter int unsigned READ_LATENCY = 2,
+    parameter int unsigned NUM_DEVICES = NVME_NUM_DEVICES
 )(
     input  logic        aclk,
     input  logic        aresetn,
@@ -53,8 +54,10 @@ module nvme_cq_ctrl #(
 );
 
     localparam int unsigned CQ_DEPTH     = (1 << CQ_ADDR_BITS);
-    localparam int unsigned N_NVME       = (1 << N_NVME_BITS);
+    localparam int unsigned N_NVME       = NUM_DEVICES;
     localparam int unsigned CQ_TOTAL_BITS = CQ_ADDR_BITS + N_NVME_BITS;
+    // The AXI controller exposes a fixed 4-KiB aperture per device.
+    localparam int unsigned CQ_BYTE_BITS = N_NVME_BITS + 12;
 
     // AXI BRAM Controller (128-bit, 1 beat = 1 CQE)
     logic               bram_en_a;
@@ -62,7 +65,7 @@ module nvme_cq_ctrl #(
     logic               bram_rst_a;
     logic [127:0]       bram_wrdata_a;
     logic [15:0]        bram_we_a;
-    logic [18:0]        bram_addr_a;
+    logic [CQ_BYTE_BITS-1:0] bram_addr_a;
     logic [127:0]       bram_rddata_a;
 
     logic [63:0]                  cq_bram_awaddr;
@@ -115,7 +118,7 @@ module nvme_cq_ctrl #(
         .s_axi_aclk       (aclk),
         .s_axi_aresetn    (aresetn),
 
-        .s_axi_awaddr     (cq_bram_awaddr[18:0]),
+        .s_axi_awaddr     (cq_bram_awaddr[CQ_BYTE_BITS-1:0]),
         .s_axi_awlen      (cq_bram_awlen),
         .s_axi_awsize     (cq_bram_awsize),
         .s_axi_awburst    (cq_bram_awburst),
@@ -135,7 +138,7 @@ module nvme_cq_ctrl #(
         .s_axi_bvalid     (cq_bram_bvalid),
         .s_axi_bready     (cq_bram_bready),
 
-        .s_axi_araddr     (cq_bram_araddr[18:0]),
+        .s_axi_araddr     (cq_bram_araddr[CQ_BYTE_BITS-1:0]),
         .s_axi_arlen      (cq_bram_arlen),
         .s_axi_arsize     (cq_bram_arsize),
         .s_axi_arburst    (cq_bram_arburst),
@@ -179,7 +182,7 @@ module nvme_cq_ctrl #(
     assign dw3 = bram_wrdata_a[127:96];
     assign wr_cid = dw3[15:0];
     assign cqe_wr_detect = bram_en_a && (|bram_we_a[15:8]);
-    assign a_en = cqe_wr_detect && !(queue_reset && queue_reset_dev == wr_dev_id);
+    assign a_en = cqe_wr_detect && wr_dev_id < N_NVME && !(queue_reset && queue_reset_dev == wr_dev_id);
     assign a_we = bram_we_a[15:8];
     assign a_addr = {wr_dev_id, wr_slot};
     assign a_data_in = bram_wrdata_a[127:64];
@@ -213,6 +216,7 @@ module nvme_cq_ctrl #(
 
 `ifndef SYNTHESIS
     initial begin
+        assert (NUM_DEVICES >= 1 && NUM_DEVICES <= (1 << N_NVME_BITS));
         assert (READ_LATENCY >= 2) else $fatal(1, "CQ ram_tp_c has two read registers");
         assert (CQ_ADDR_BITS <= 8) else $fatal(1, "CQ must fit the per-device 4 KiB aperture");
     end
@@ -267,7 +271,7 @@ module nvme_cq_ctrl #(
                              !(queue_reset && queue_reset_dev == poll_dev_r);
         m_cqe.data         = '0;
         m_cqe.data.dev_id  = poll_dev_r;
-        m_cqe.data.cid     = cqe_word_r[32 +: CQ_ADDR_BITS];
+        m_cqe.data.cid     = NVME_RSP_CID_BITS'(cqe_word_r[32 +: CQ_ADDR_BITS]);  // zero-extended to 8 bits
         m_cqe.data.status  = cqe_word_r[63:49];
         m_cqe.data.phase   = cqe_word_r[48];
     end
@@ -293,7 +297,7 @@ module nvme_cq_ctrl #(
             cqe_word_r  <= cqe_word_n;
             wait_cnt_r  <= wait_cnt_n;
 
-            if (queue_reset) begin
+            if (queue_reset && queue_reset_dev < N_NVME) begin
                 cq_head_r[queue_reset_dev] <= '0;
                 exp_phase_r[queue_reset_dev] <= 1'b1;
                 if (queue_reset_dev == poll_dev_r) state_r <= ST_NEXT_DEV;
@@ -322,7 +326,7 @@ module nvme_cq_ctrl #(
 
             ST_NEXT_DEV: begin
                 // Round-robin: try next device
-                poll_dev_n = poll_dev_r + 1'b1;
+                poll_dev_n = (poll_dev_r == N_NVME_BITS'(N_NVME-1)) ? '0 : poll_dev_r + 1'b1;
                 state_n    = ST_RD_REQ;
             end
 

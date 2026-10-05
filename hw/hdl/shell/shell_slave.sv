@@ -296,6 +296,10 @@ always_ff @(posedge aclk) begin
           axi_rdata[0] <= NVME_FLOW;
           // Connection type is meaningful only when NVMe is enabled (bit 0).
           axi_rdata[1] <= NVME_PL_FLOW;
+          // Advertise the actual I/O depth to the matching driver.
+          axi_rdata[16:8] <= 9'(NVME_QUEUE_DEPTH);
+          // Advertise the actual number of instantiated device slots.
+          axi_rdata[24:20] <= 5'(NVME_NUM_DEVICES);
         end
 
 `ifdef EN_RDMA

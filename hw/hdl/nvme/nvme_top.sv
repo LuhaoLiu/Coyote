@@ -176,7 +176,8 @@ module nvme_top (
     assign sq_db_strm.ready = pl_sq_db_strm.ready;
     always_comb begin
         for (int d = 0; d < N_NVME; d++)
-            // The tracker adds four, so seed it from the desired CQ address.
+            // The tracker sets bit 2 (adds four), so seed it with the desired
+            // CQ address minus four, whose bit 2 is clear.
             pl_sq_db_addr_tbl[d] =
                 (d == 0) ? (PL_NVME_CQ_DB_ADDR - 64'd4) : 64'd0;
     end

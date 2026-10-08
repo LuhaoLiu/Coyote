@@ -31,9 +31,9 @@ import lynxTypes::*;
 /**
  * @brief Convert the PL-NVMe Root Complex AXI master into Coyote host DMA.
  *
- * The PL-NVMe block design uses address bit 42 only as a SmartConnect routing
- * tag: [4 TiB, 8 TiB) is sent to axi_nvme_host.  The tag is removed here before
- * the address is submitted to the host-facing QDMA path.
+ * The PL-NVMe block design sends BD-local [0, 8 TiB) to axi_nvme_host.  This
+ * host window is an identity map (HOST_ROUTE_BASE is zero), so the address is
+ * submitted to the host-facing QDMA path unchanged.
  *
  * Each direction keeps up to N_RD_OUTSTANDING/N_WR_OUTSTANDING AXI bursts in
  * flight.  Every accepted burst is issued immediately as one host DMA request,
@@ -50,8 +50,8 @@ import lynxTypes::*;
  * AXI requests are completed with DECERR and are not submitted to host DMA.
  */
 module nvme_axi_host_bridge #(
-    parameter logic [63:0] HOST_ROUTE_BASE  = 64'h0000_0400_0000_0000,
-    parameter logic [63:0] HOST_ROUTE_SIZE  = 64'h0000_0400_0000_0000,
+    parameter logic [63:0] HOST_ROUTE_BASE  = 64'h0000_0000_0000_0000,
+    parameter logic [63:0] HOST_ROUTE_SIZE  = 64'h0000_0800_0000_0000,
     // Queue depths (at least 2); also the outstanding burst limit per direction
     parameter integer      N_RD_OUTSTANDING = 32,
     parameter integer      N_WR_OUTSTANDING = 32
@@ -88,22 +88,21 @@ module nvme_axi_host_bridge #(
         end
     endfunction
 
+    // The host window is a power of two aligned to its size, so membership
+    // is a mask compare. A burst that starts inside the window also ends
+    // inside it: an AXI INCR burst never crosses a 4-KiB boundary, and the
+    // window ends on one.
     function automatic logic request_supported(
         input logic [63:0] addr,
-        input logic [7:0]  axi_len,
         input logic [2:0]  axi_size,
         input logic [1:0]  axi_burst
     );
-        logic [64:0] end_addr;
         begin
-            end_addr = {1'b0, addr} +
-                       {{(65-LEN_BITS){1'b0}}, burst_bytes(axi_len)};
             request_supported =
                 (axi_burst == AXI_BURST_INCR) &&
                 (axi_size == FULL_SIZE) &&
                 (addr[AXI_BYTE_BITS-1:0] == '0) &&
-                (addr >= HOST_ROUTE_BASE) &&
-                (end_addr <= {1'b0, HOST_ROUTE_BASE + HOST_ROUTE_SIZE});
+                ((addr & ~(HOST_ROUTE_SIZE - 64'd1)) == HOST_ROUTE_BASE);
         end
     endfunction
 
@@ -112,10 +111,9 @@ module nvme_axi_host_bridge #(
     );
         logic [63:0] decoded_addr;
         begin
-            // The current 4-TiB window is equivalent to clearing bit 42.
-            // Subtraction keeps the decoder correct if the routing window is
-            // moved through the module parameters later.
-            decoded_addr = tagged_addr - HOST_ROUTE_BASE;
+            // The window is aligned to its size, so removing the base keeps
+            // the offset bits (identity for the current zero-based window).
+            decoded_addr = tagged_addr & (HOST_ROUTE_SIZE - 64'd1);
             host_paddr = decoded_addr[PADDR_BITS-1:0];
         end
     endfunction
@@ -167,7 +165,7 @@ module nvme_axi_host_bridge #(
     assign s_axi.arready = enable && rd_burst_rdy && rd_req_rdy;
     assign ar_fire = s_axi.arvalid && s_axi.arready;
     assign ar_host = request_supported(
-        s_axi.araddr, s_axi.arlen, s_axi.arsize, s_axi.arburst);
+        s_axi.araddr, s_axi.arsize, s_axi.arburst);
 
     assign rd_req = host_req(s_axi.araddr, s_axi.arlen);
     assign rd_burst_in.id = s_axi.arid;
@@ -261,7 +259,7 @@ module nvme_axi_host_bridge #(
                            wr_burst_rdy && wr_req_rdy;
     assign aw_fire = s_axi.awvalid && s_axi.awready;
     assign aw_host = request_supported(
-        s_axi.awaddr, s_axi.awlen, s_axi.awsize, s_axi.awburst);
+        s_axi.awaddr, s_axi.awsize, s_axi.awburst);
 
     assign wr_req = host_req(s_axi.awaddr, s_axi.awlen);
     assign wr_burst_in.id = s_axi.awid;
@@ -388,5 +386,22 @@ module nvme_axi_host_bridge #(
             wr_done_C <= wr_done_N;
         end
     end
+
+`ifndef SYNTHESIS
+    initial assert ((HOST_ROUTE_SIZE & (HOST_ROUTE_SIZE - 64'd1)) == 64'd0 &&
+                    HOST_ROUTE_SIZE >= 64'd4096 &&
+                    (HOST_ROUTE_BASE & (HOST_ROUTE_SIZE - 64'd1)) == 64'd0)
+        else $fatal(1, "nvme_axi_host_bridge: host window must be a power of two >= 4 KiB, aligned to its size");
+    // The mask compare relies on AXI bursts never crossing 4 KiB.
+    always @(posedge aclk)
+        if (aresetn) begin
+            if (ar_fire && ar_host)
+                assert ({5'd0, s_axi.araddr[11:0]} + 17'(burst_bytes(s_axi.arlen)) <= 17'd4096)
+                    else $error("nvme_axi_host_bridge: read burst crosses 4 KiB");
+            if (aw_fire && aw_host)
+                assert ({5'd0, s_axi.awaddr[11:0]} + 17'(burst_bytes(s_axi.awlen)) <= 17'd4096)
+                    else $error("nvme_axi_host_bridge: write burst crosses 4 KiB");
+        end
+`endif
 
 endmodule

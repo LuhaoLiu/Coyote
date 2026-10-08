@@ -672,8 +672,10 @@ module pl_pcie_nvme_setup_fsm #(
             ST_SQE_WRITE: begin
                 ram_en   = 1'b1;
                 ram_we   = 8'hff;
-                ram_addr = (ADMIN_SQ_RAM_OFFSET >> 3) +
-                           (admin_sq_tail * 8) + sqe_word_index;
+                // Buffers are 4-KiB (512-word) aligned and the index stays
+                // below 512 words (QUEUE_DEPTH <= 64), so OR equals the sum.
+                ram_addr = (ADMIN_SQ_RAM_OFFSET >> 3) |
+                           (admin_sq_tail * 8) | sqe_word_index;
                 ram_wdata = sqe_word(
                     pending_command, pending_cid, sqe_word_index
                 );
@@ -683,15 +685,15 @@ module pl_pcie_nvme_setup_fsm #(
             ST_CQ_RESULT_REQ: begin
                 ram_en   = 1'b1;
                 ram_we   = 8'h00;
-                ram_addr = (ADMIN_CQ_RAM_OFFSET >> 3) +
+                ram_addr = (ADMIN_CQ_RAM_OFFSET >> 3) |
                            (admin_cq_head * 2);
             end
 
             ST_CQ_READ1_REQ: begin
                 ram_en   = 1'b1;
                 ram_we   = 8'h00;
-                ram_addr = (ADMIN_CQ_RAM_OFFSET >> 3) +
-                           (admin_cq_head * 2) + 1;
+                ram_addr = (ADMIN_CQ_RAM_OFFSET >> 3) |
+                           (admin_cq_head * 2) | 1;
             end
 
             ST_DISC_CTRL_W0_REQ: begin
@@ -721,7 +723,7 @@ module pl_pcie_nvme_setup_fsm #(
             ST_DISC_LIST_REQ: begin
                 ram_en   = 1'b1;
                 ram_we   = 8'h00;
-                ram_addr = (DISCOVERY_RAM_OFFSET >> 3) +
+                ram_addr = (DISCOVERY_RAM_OFFSET >> 3) |
                            namespace_list_word_index;
             end
 
@@ -754,8 +756,8 @@ module pl_pcie_nvme_setup_fsm #(
                 ram_we   = 8'h00;
                 // LBA format descriptors start at byte 128 and are four
                 // bytes each; two descriptors therefore share one RAM word.
-                ram_addr = (DISCOVERY_RAM_OFFSET >> 3) + 16 +
-                           (discovered_lba_format_index >> 1);
+                ram_addr = (DISCOVERY_RAM_OFFSET >> 3) |
+                           (16 + (discovered_lba_format_index >> 1));
             end
 
             ST_HEALTH_CTRL_REQ: if (ENABLE_SETUP_DEBUG) begin
@@ -1518,6 +1520,15 @@ module pl_pcie_nvme_setup_fsm #(
             end
         end
     end
+
+`ifndef SYNTHESIS
+    // The RAM word indices above are OR-ed into these offsets.
+    initial assert ((DISCOVERY_RAM_OFFSET[11:0] == 12'd0) &&
+                    (ADMIN_SQ_RAM_OFFSET[11:0] == 12'd0) &&
+                    (ADMIN_CQ_RAM_OFFSET[11:0] == 12'd0) &&
+                    (QUEUE_DEPTH <= 64))
+        else $fatal(1, "pl_pcie_nvme_setup_fsm: RAM buffers must be 4-KiB aligned and admin queues <= 64 entries");
+`endif
 
     initial begin
         if ((IO_QUEUE_DEPTH < 2) || (IO_QUEUE_DEPTH > 256) ||

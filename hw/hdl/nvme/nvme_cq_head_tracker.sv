@@ -105,9 +105,22 @@ module nvme_cq_head_tracker #(
     assign timeout_trigger = (timer[scan_dev_C] >= TIMEOUT_CYCLES) && (pending_count > 0);
     assign should_send_dma = batch_trigger || timeout_trigger;
 
-    // CQ doorbell = SQ doorbell + 4, indexed by current scan device
+    // CQ doorbell = SQ doorbell + 4, indexed by current scan device. Every
+    // NVMe SQ tail doorbell is BAR + 0x1000 + 2y*(4 << DSTRD) with a page-
+    // aligned BAR, so its bit 2 is zero and OR equals the sum.
+    logic [63:0] sq_doorbell_addr;
     logic [63:0] cq_doorbell_addr;
-    assign cq_doorbell_addr = sq_db_addr_tbl[scan_dev_C] + CQ_DB_OFFSET;
+    assign sq_doorbell_addr = sq_db_addr_tbl[scan_dev_C];
+    assign cq_doorbell_addr = sq_doorbell_addr | CQ_DB_OFFSET;
+
+`ifndef SYNTHESIS
+    initial assert (CQ_DB_OFFSET == 64'd4)
+        else $fatal(1, "nvme_cq_head_tracker: CQ doorbell offset must be the single bit 2");
+    always @(posedge aclk)
+        if (aresetn && m_cq_dma_req.valid)
+            assert ((sq_doorbell_addr & CQ_DB_OFFSET) == 64'd0)
+                else $error("nvme_cq_head_tracker: SQ doorbell address has bit 2 set");
+`endif
 
     // State-only handshakes and frozen payloads are independent of READY.
     assign m_cq_dma_req.valid = (state_C == ST_SEND_DMA_REQ);

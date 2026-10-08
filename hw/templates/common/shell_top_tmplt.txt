@@ -548,6 +548,19 @@ module shell_top (
     assign axi_nvme_host.arregion = '0;
     assign axi_nvme_host.awregion = '0;
 
+    // SmartConnect passes the full BD-local address and routes only the card
+    // window [8 TiB, 12 TiB) to this port, so the single base bit (43) is set
+    // in every address here; clearing it gives the zero-based card address.
+    localparam logic [63:0] PL_CARD_ROUTE_BASE = 64'h0000_0800_0000_0000;
+    logic [63:0] axi_nvme_card_awaddr_bd;
+    logic [63:0] axi_nvme_card_araddr_bd;
+    assign axi_nvme_card_mem.awaddr = axi_nvme_card_awaddr_bd & ~PL_CARD_ROUTE_BASE;
+    assign axi_nvme_card_mem.araddr = axi_nvme_card_araddr_bd & ~PL_CARD_ROUTE_BASE;
+`ifndef SYNTHESIS
+    initial assert ((PL_CARD_ROUTE_BASE & (PL_CARD_ROUTE_BASE - 64'd1)) == 64'd0)
+        else $fatal(1, "shell_top: PL_CARD_ROUTE_BASE must be a single bit");
+`endif
+
     design_plnvme inst_design_plnvme (
         .aclk                         (aclk),
         .aresetn                      (aresetn),
@@ -709,7 +722,7 @@ module shell_top (
         .axi_nvme_cq_rvalid           (axi_nvme_cq.rvalid),
         .axi_nvme_cq_rready           (axi_nvme_cq.rready),
 
-        .axi_nvme_card_awaddr         (axi_nvme_card_mem.awaddr),
+        .axi_nvme_card_awaddr         (axi_nvme_card_awaddr_bd),
         .axi_nvme_card_awlen          (axi_nvme_card_mem.awlen),
         .axi_nvme_card_awsize         (axi_nvme_card_mem.awsize),
         .axi_nvme_card_awburst        (axi_nvme_card_mem.awburst),
@@ -727,7 +740,7 @@ module shell_top (
         .axi_nvme_card_bresp          (axi_nvme_card_mem.bresp),
         .axi_nvme_card_bvalid         (axi_nvme_card_mem.bvalid),
         .axi_nvme_card_bready         (axi_nvme_card_mem.bready),
-        .axi_nvme_card_araddr         (axi_nvme_card_mem.araddr),
+        .axi_nvme_card_araddr         (axi_nvme_card_araddr_bd),
         .axi_nvme_card_arlen          (axi_nvme_card_mem.arlen),
         .axi_nvme_card_arsize         (axi_nvme_card_mem.arsize),
         .axi_nvme_card_arburst        (axi_nvme_card_mem.arburst),
@@ -810,7 +823,7 @@ module shell_top (
     );
 
 {% if cnfg.en_strm %}
-    // Convert the BD-local [4 TiB, 8 TiB) routing window into ordinary Coyote
+    // Convert the BD-local [0, 8 TiB) host window (identity) into ordinary Coyote
     // host DMA requests. Client 0 is the existing vFPGA path; client 1 is NVMe.
     nvme_axi_host_bridge inst_nvme_axi_host_bridge (
         .aclk                 (aclk),

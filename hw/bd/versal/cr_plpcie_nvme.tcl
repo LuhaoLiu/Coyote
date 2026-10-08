@@ -25,8 +25,8 @@
 ######################################################################################
 
 # Uncomment this single sentinel line to instantiate the PL-NVMe ILA/VIO debug cores.
-set ::plnvme_debug 0
-# set ::plnvme_debug 1
+# set ::plnvme_debug 0
+set ::plnvme_debug 1
 
 proc cr_bd_plnvme_debug_enabled {} {
   return [expr {$::plnvme_debug != 0}]
@@ -1498,9 +1498,9 @@ proc cr_bd_design_plnvme { parentCell } {
   assign_bd_address -offset 0x80000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces pl_pcie_nvme_top_wra_0/m_axi_mmio] [get_bd_addr_segs qdma_0/S_AXI_BRIDGE/BAR1] -force
   assign_bd_address -offset 0x00000000 -range 0x10000000 -target_address_space [get_bd_addr_spaces pl_pcie_nvme_top_wra_0/m_axil_csr] [get_bd_addr_segs qdma_0/S_AXI_LITE_CSR/CTL0] -force
   assign_bd_address -offset 0x00000000 -range 0x10000000 -target_address_space [get_bd_addr_spaces pl_pcie_nvme_top_wra_0/m_axil_ecam] [get_bd_addr_segs qdma_0/S_AXI_LITE/CTL0] -force
-  assign_bd_address -offset 0x00000000 -range 0x040000000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_card/Reg] -force
+  assign_bd_address -offset 0x080000000000 -range 0x040000000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_card/Reg] -force
   assign_bd_address -offset 0x0FFFF4020000 -range 0x00010000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_cq/Reg] -force
-  assign_bd_address -offset 0x040000000000 -range 0x040000000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_host/Reg] -force
+  assign_bd_address -offset 0x000000000000 -range 0x080000000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_host/Reg] -force
   assign_bd_address -offset 0x0FFFF5000000 -range 0x01000000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_prp/Reg] -force
   assign_bd_address -offset 0x0FFFF4040000 -range 0x00040000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs axi_nvme_sq/Reg] -force
   assign_bd_address -offset 0x0FFFFFFFC000 -range 0x00004000 -target_address_space [get_bd_addr_spaces qdma_0/M_AXI_BRIDGE] [get_bd_addr_segs pl_pcie_nvme_top_wra_0/s_axi_dma/reg0] -force

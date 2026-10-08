@@ -60,17 +60,23 @@ module nvme_prp_builder #(
 
 `ifdef EN_NVME_PL
     // PG344 programs a 16-TiB inbound Root-Port aperture at this PCIe base and
-    // removes the base again before axi_nvme_card. Consequently, adding this value
-    // to a zero-based card address preserves the card address one-to-one at the
-    // BD's axi_nvme_card port.
+    // removes the base again: PCIe address = PL_RP_DMA_PCIE_BASE + BD-local
+    // address. The aperture cannot grow; qdma_0 translates at most 2^44 bytes.
     localparam logic [63:0] PL_RP_DMA_PCIE_BASE =
         64'h0000_1000_0000_0000;
 
-    // BD-local [4 TiB, 8 TiB) is a routing window for host memory. The Root
-    // Complex removes PL_RP_DMA_PCIE_BASE, SmartConnect selects axi_nvme_host
-    // from bit 42, and nvme_axi_host_bridge clears that bit before host DMA.
+    // BD-local [0, 8 TiB) is the host window, an identity map: host physical
+    // address P is BD-local P. SmartConnect selects axi_nvme_host for it and
+    // nvme_axi_host_bridge passes the address through.
     localparam logic [63:0] PL_HOST_ROUTE_BASE =
-        64'h0000_0400_0000_0000;
+        64'h0000_0000_0000_0000;
+    localparam logic [63:0] PL_HOST_ROUTE_SIZE =
+        64'h0000_0800_0000_0000;
+
+    // BD-local [8 TiB, 12 TiB) is the card window. shell_top subtracts this
+    // base before axi_nvme_card_mem, so card memory sees zero-based addresses.
+    localparam logic [63:0] PL_CARD_ROUTE_BASE =
+        64'h0000_0800_0000_0000;
 
     // SSD-visible address of the 16-MiB PRP-list window. PG344 translates it
     // to the BD-local axi_nvme_prp segment at 0x0FFF_F500_0000.
@@ -86,17 +92,36 @@ module nvme_prp_builder #(
     function automatic logic pl_host_paddr_valid(
         input logic [PADDR_BITS-1:0] paddr
     );
-        // Address bit 42 is reserved as the host/card routing tag.
-        pl_host_paddr_valid = (paddr[PADDR_BITS-1:42] == '0);
+        // Host addresses must fit in the 8 TiB host window. The window size is
+        // a power of two, so this tests that no bit at or above it is set.
+        pl_host_paddr_valid =
+            ((pl_extend_paddr(paddr) & ~(PL_HOST_ROUTE_SIZE - 64'd1)) == 64'd0);
     endfunction
 
     function automatic logic [63:0] pl_encode_paddr(
         input logic [PADDR_BITS-1:0] paddr,
         input logic                  is_host
     );
-        pl_encode_paddr = pl_extend_paddr(paddr) + PL_RP_DMA_PCIE_BASE +
-                          (is_host ? PL_HOST_ROUTE_BASE : 64'd0);
+        // The terms occupy disjoint bits, so OR equals the sum: the aperture
+        // base is bit 44 and the card window base bit 43; a host paddr is
+        // below 8 TiB (pl_host_paddr_valid faults otherwise) and a card
+        // address is far below 8 TiB (card memory is tens of GiB).
+        pl_encode_paddr = pl_extend_paddr(paddr) | PL_RP_DMA_PCIE_BASE |
+                          (is_host ? PL_HOST_ROUTE_BASE : PL_CARD_ROUTE_BASE);
     endfunction
+
+`ifndef SYNTHESIS
+    initial assert (PL_HOST_ROUTE_BASE == 64'd0 &&
+                    (PL_HOST_ROUTE_SIZE & (PL_HOST_ROUTE_SIZE - 64'd1)) == 64'd0 &&
+                    (PL_CARD_ROUTE_BASE & (PL_CARD_ROUTE_BASE - 64'd1)) == 64'd0 &&
+                    (PL_RP_DMA_PCIE_BASE & (PL_RP_DMA_PCIE_BASE - 64'd1)) == 64'd0 &&
+                    PL_CARD_ROUTE_BASE >= PL_HOST_ROUTE_SIZE &&
+                    PL_RP_DMA_PCIE_BASE > PL_CARD_ROUTE_BASE)
+        else $fatal(1, "nvme_prp_builder: PL route bases must be disjoint single bits above the host window");
+    initial assert (PL_PRP_PCIE_BASE[N_NVME_BITS+PRP_DEV_STRIDE_BITS-1:0] == '0 &&
+                    NVME_QUEUE_BITS + 12 <= PRP_DEV_STRIDE_BITS)
+        else $fatal(1, "nvme_prp_builder: PRP-list base must clear the device and CID fields");
+`endif
 `endif
 
     // State machine
@@ -199,8 +224,8 @@ module nvme_prp_builder #(
 `ifdef EN_NVME_PL
                 if (mmu_rsp_C.is_host &&
                     !pl_host_paddr_valid(mmu_rsp_C.paddr)) begin
-                    // Host physical addresses >= 4 TiB collide with the route
-                    // tag and cannot be represented by the current aperture.
+                    // Host physical addresses >= 8 TiB lie outside the host
+                    // window and cannot be represented by the aperture.
                     state_N = ST_FAULT;
                 end else begin
                     prp_rsp_N.prp1 = pl_encode_paddr(
@@ -277,11 +302,13 @@ module nvme_prp_builder #(
                         // >8KB: PRP2 points to PRP list
                         prp_rsp_N = prp_rsp_C;
 `ifdef EN_NVME_PL
+                        // Disjoint fields: 16-MiB aligned base, device in
+                        // [23:20], CID page in [19:12]; OR equals the sum.
                         prp_rsp_N.prp2 = PL_PRP_PCIE_BASE
-                                       + ({{(64-N_NVME_BITS){1'b0}},
+                                       | ({{(64-N_NVME_BITS){1'b0}},
                                             prp_req_C.dev_id}
                                           << PRP_DEV_STRIDE_BITS)
-                                       + ({{(64-NVME_QUEUE_BITS){1'b0}},
+                                       | ({{(64-NVME_QUEUE_BITS){1'b0}},
                                             prp_req_C.sq_tail} << 12);
 `else
                         prp_rsp_N.prp2 = FPGA_PRP_BAR_BASE

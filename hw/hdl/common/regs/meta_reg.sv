@@ -200,6 +200,18 @@ else if(DATA_BITS == 256) begin
 		.m_axis_tdata(m_meta.data)
 	);
 end
+else if(DATA_BITS == 384) begin
+	axis_register_slice_meta_384 inst_reg_slice (
+		.aclk(aclk),
+		.aresetn(aresetn),
+		.s_axis_tvalid(s_meta.valid),
+		.s_axis_tready(s_meta.ready),
+		.s_axis_tdata(s_meta.data),
+		.m_axis_tvalid(m_meta.valid),
+		.m_axis_tready(m_meta.ready),
+		.m_axis_tdata(m_meta.data)
+	);
+end
 else if(DATA_BITS == 512) begin
 	axis_register_slice_meta_512 inst_reg_slice (
 		.aclk(aclk),

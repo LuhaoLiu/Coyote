@@ -100,7 +100,7 @@ always_comb begin
   rdma_sq_data[32+RDMA_QPN_BITS+2+OFFS_BITS+:RDMA_VADDR_BITS]                 = 
     {16'h0000, rdma_sq.data.req_1.vaddr};
   rdma_sq_data[32+RDMA_QPN_BITS+2+OFFS_BITS+RDMA_VADDR_BITS+:RDMA_VADDR_BITS] = 
-    {10'h000, rdma_sq.data.req_2.strm, rdma_sq.data.req_1.dest, rdma_sq.data.req_2.vaddr};
+    {10'h000, rdma_sq.data.req_2.strm[RDMA_STRM_BITS-1:0], rdma_sq.data.req_1.dest, rdma_sq.data.req_2.vaddr};
   rdma_sq_data[32+RDMA_QPN_BITS+2+OFFS_BITS+2*RDMA_VADDR_BITS+:RDMA_LEN_BITS] = rdma_sq.data.req_1.len;
   rdma_sq_data[32+RDMA_QPN_BITS+2+OFFS_BITS+2*RDMA_VADDR_BITS+RDMA_LEN_BITS+:RDMA_IMM_BITS] = {rdma_sq.data.req_2.offs[3:0], rdma_sq.data.req_2.len};
 end
@@ -118,9 +118,9 @@ assign rdma_ack.data.ack.pid  = ack_meta_data[32+:PID_BITS];
 assign rdma_ack.data.ack.vfid = ack_meta_data[32+PID_BITS+:DEST_BITS];
 assign rdma_ack.data.ack.host = ack_meta_data[32+RDMA_QPN_BITS+:1];
 assign rdma_ack.data.ack.dest = ack_meta_data[32+RDMA_QPN_BITS+1+:DEST_BITS];
-assign rdma_ack.data.ack.strm = ack_meta_data[32+RDMA_QPN_BITS+1+DEST_BITS+:STRM_BITS];
+assign rdma_ack.data.ack.strm = STRM_BITS'(ack_meta_data[32+RDMA_QPN_BITS+1+DEST_BITS+:RDMA_STRM_BITS]);
 assign rdma_ack.data.ack.rsrvd = 0;
-assign rdma_ack.data.last = ack_meta_data[32+RDMA_QPN_BITS+1+DEST_BITS+STRM_BITS+:1];
+assign rdma_ack.data.last = ack_meta_data[32+RDMA_QPN_BITS+1+DEST_BITS+RDMA_STRM_BITS+:1];
 
 rdma_flow inst_rdma_flow (
     .aclk(nclk),
@@ -220,11 +220,15 @@ assign rdma_rd_req.data.vfid              = rd_cmd_data[32+PID_BITS+:DEST_BITS];
 assign rdma_rd_req.data.last              = rd_cmd_data[32+RDMA_QPN_BITS+0+:1];
 assign rdma_rd_req.data.vaddr             = rd_cmd_data[32+RDMA_QPN_BITS+1+:VADDR_BITS];
 assign rdma_rd_req.data.dest              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+:DEST_BITS];
-assign rdma_rd_req.data.strm              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+:STRM_BITS];
-assign rdma_rd_req.data.len               = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+:LEN_BITS];
-assign rdma_rd_req.data.actv              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+LEN_BITS+0+:1];
-assign rdma_rd_req.data.host              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+LEN_BITS+1+:1];
-assign rdma_rd_req.data.offs              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+LEN_BITS+2+:OFFS_BITS];
+assign rdma_rd_req.data.strm              = STRM_BITS'(rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+:RDMA_STRM_BITS]);
+assign rdma_rd_req.data.len               = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+:LEN_BITS];
+assign rdma_rd_req.data.actv              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+LEN_BITS+0+:1];
+assign rdma_rd_req.data.host              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+LEN_BITS+1+:1];
+assign rdma_rd_req.data.offs              = rd_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+LEN_BITS+2+:OFFS_BITS];
+assign rdma_rd_req.data.naddr              = 0;
+assign rdma_rd_req.data.dev_id             = 0;
+assign rdma_rd_req.data.nsid               = 0;
+assign rdma_rd_req.data.writeRead          = 0;
 
 // WR
 assign rdma_wr_req.data.opcode            = wr_cmd_data[0+:OPCODE_BITS];
@@ -238,11 +242,15 @@ assign rdma_wr_req.data.vfid              = wr_cmd_data[32+PID_BITS+:DEST_BITS];
 assign rdma_wr_req.data.last              = wr_cmd_data[32+RDMA_QPN_BITS+0+:1];
 assign rdma_wr_req.data.vaddr             = wr_cmd_data[32+RDMA_QPN_BITS+1+:VADDR_BITS];
 assign rdma_wr_req.data.dest              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+:DEST_BITS];
-assign rdma_wr_req.data.strm              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+:STRM_BITS];
-assign rdma_wr_req.data.len               = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+:LEN_BITS];
-assign rdma_wr_req.data.actv              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+LEN_BITS+0+:1];
-assign rdma_wr_req.data.host              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+LEN_BITS+1+:1];
-assign rdma_wr_req.data.offs              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+STRM_BITS+LEN_BITS+2+:OFFS_BITS];
+assign rdma_wr_req.data.strm              = STRM_BITS'(wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+:RDMA_STRM_BITS]);
+assign rdma_wr_req.data.len               = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+:LEN_BITS];
+assign rdma_wr_req.data.actv              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+LEN_BITS+0+:1];
+assign rdma_wr_req.data.host              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+LEN_BITS+1+:1];
+assign rdma_wr_req.data.offs              = wr_cmd_data[32+RDMA_QPN_BITS+1+VADDR_BITS+DEST_BITS+RDMA_STRM_BITS+LEN_BITS+2+:OFFS_BITS];
+assign rdma_wr_req.data.naddr              = 0;
+assign rdma_wr_req.data.dev_id             = 0;
+assign rdma_wr_req.data.nsid               = 0;
+assign rdma_wr_req.data.writeRead          = 0;
 
 // Work-around as retransmissions aren't supported on Versal devices (just yet)
 // Define the signals for the retransmission signal to be able to decouple for the V80 

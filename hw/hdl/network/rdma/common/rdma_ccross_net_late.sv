@@ -120,7 +120,7 @@ if(ENABLED == 1) begin
     );
 
     // RDMA req host
-    axis_data_fifo_rdma_ccross_256 inst_cross_rdma_host_req (
+    axis_data_fifo_rdma_ccross_384 inst_cross_rdma_host_req (
         .m_axis_aclk(nclk),
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
@@ -145,7 +145,7 @@ if(ENABLED == 1) begin
         .m_axis_tdata(m_rdma_ack_aclk.data)
     );
 
-    axis_data_fifo_rdma_ccross_128 inst_cross_rdma_req_rd (
+    axis_data_fifo_rdma_ccross_192 inst_cross_rdma_req_rd (
         .m_axis_aclk(aclk),
         .s_axis_aclk(nclk),
         .s_axis_aresetn(nresetn),
@@ -190,7 +190,7 @@ if(ENABLED == 1) begin
         .m_axis_tlast (m_axis_rdma_rd_rsp_nclk.tlast)
     );
 
-    axis_data_fifo_rdma_ccross_128 inst_cross_rdma_req_wr (
+    axis_data_fifo_rdma_ccross_192 inst_cross_rdma_req_wr (
         .m_axis_aclk(aclk),
         .s_axis_aclk(nclk),
         .s_axis_aresetn(nresetn),
@@ -337,7 +337,7 @@ else begin
     );
 
     // RDMA req host
-    axis_data_fifo_rdma_256 inst_rdma_sq_cross_nc (
+    axis_data_fifo_rdma_384 inst_rdma_sq_cross_nc (
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
         .s_axis_tvalid(s_rdma_sq_aclk.valid),
@@ -360,7 +360,7 @@ else begin
         .m_axis_tdata(m_rdma_ack_aclk.data)
     );
 
-    axis_data_fifo_rdma_128 inst_rdma_req_rd_nc (
+    axis_data_fifo_rdma_192 inst_rdma_req_rd_nc (
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
         .s_axis_tvalid(s_rdma_rd_req_nclk.valid),
@@ -402,7 +402,7 @@ else begin
         .m_axis_tlast (m_axis_rdma_rd_rsp_nclk.tlast)
     );
 
-    axis_data_fifo_rdma_128 inst_rdma_req_wr_nc (
+    axis_data_fifo_rdma_192 inst_rdma_req_wr_nc (
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
         .s_axis_tvalid(s_rdma_wr_req_nclk.valid),

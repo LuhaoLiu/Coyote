@@ -206,6 +206,9 @@ package lynxTypes;
     localparam integer OFFS_BITS = 6;
     localparam integer OPCODE_BITS = 5;
     localparam integer STRM_BITS = 3;
+    // Host control words and the HLS RoCE interface retain their two-bit stream ABI.
+    localparam integer CTRL_STRM_BITS = 2;
+    localparam integer RDMA_STRM_BITS = 2;
 
     localparam integer LOCAL_READ = 1;
     localparam integer LOCAL_WRITE = 2;

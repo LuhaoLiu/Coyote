@@ -156,6 +156,10 @@ always_comb begin: DP
     m_req.valid = 1'b0;
 
     // Data
+    m_req.data.naddr = 0;
+    m_req.data.dev_id = 0;
+    m_req.data.nsid = 0;
+    m_req.data.writeRead = 0;
     m_req.data.opcode = opcode_C;
     m_req.data.mode = mode_C;
     m_req.data.rdma = rdma_C;

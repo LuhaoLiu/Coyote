@@ -53,7 +53,7 @@ module rdma_queue (
 );
 
     // RDMA send queue
-    axis_data_fifo_rdma_256 inst_rdma_sq_nc (
+    axis_data_fifo_rdma_384 inst_rdma_sq_nc (
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
         .s_axis_tvalid(s_rdma_sq_u.valid),
@@ -77,7 +77,7 @@ module rdma_queue (
     );
 
     // RDMA rd command
-    axis_data_fifo_rdma_128 inst_rdma_req_rd_nc (
+    axis_data_fifo_rdma_192 inst_rdma_req_rd_nc (
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
         .s_axis_tvalid(s_rdma_rd_req_n.valid),
@@ -120,7 +120,7 @@ module rdma_queue (
     );
 
     // RDMA wr command
-    axis_data_fifo_rdma_128 inst_rdma_req_wr_nc (
+    axis_data_fifo_rdma_192 inst_rdma_req_wr_nc (
         .s_axis_aclk(aclk),
         .s_axis_aresetn(aresetn),
         .s_axis_tvalid(s_rdma_wr_req_n.valid),

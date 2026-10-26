@@ -550,7 +550,7 @@ always_ff @(posedge aclk) begin
                 slv_reg[STAT_SENT_LOCAL_WR_REG] <= slv_reg[STAT_SENT_LOCAL_WR_REG] + 1;
             end
             else if(s_axi_ctrl.wdata[CTRL_ACTV_OFFS]) begin
-                if(is_strm_local(s_axi_ctrl.wdata[CTRL_STRM_OFFS+:STRM_BITS])) begin
+                if(is_strm_local(s_axi_ctrl.wdata[CTRL_STRM_OFFS+:CTRL_STRM_BITS])) begin
                     local_post <= 1'b1;
                     slv_reg[STAT_SENT_LOCAL_RD_REG] <= slv_reg[STAT_SENT_LOCAL_RD_REG] + 1;
                 end
@@ -560,7 +560,7 @@ always_ff @(posedge aclk) begin
                 end
             end
             else if(slv_reg[CTRL_REG_2][CTRL_ACTV_OFFS]) begin
-                if(is_strm_local(slv_reg[CTRL_REG_2][CTRL_STRM_OFFS+:STRM_BITS])) begin
+                if(is_strm_local(slv_reg[CTRL_REG_2][CTRL_STRM_OFFS+:CTRL_STRM_BITS])) begin
                     local_post <= 1'b1;
                     slv_reg[STAT_SENT_LOCAL_WR_REG] <= slv_reg[STAT_SENT_LOCAL_WR_REG] + 1;
                 end
@@ -1181,7 +1181,7 @@ assign usr_irq = irq_pending;
 metaIntf #(.STYPE(dreq_t)) host_req (.*);
 
 assign host_req.data.req_1.opcode       = slv_reg[CTRL_REG][CTRL_OPCODE_OFFS+:OPCODE_BITS];
-assign host_req.data.req_1.strm         = slv_reg[CTRL_REG][CTRL_STRM_OFFS+:STRM_BITS];
+assign host_req.data.req_1.strm         = STRM_BITS'(slv_reg[CTRL_REG][CTRL_STRM_OFFS+:CTRL_STRM_BITS]);
 assign host_req.data.req_1.mode         = slv_reg[CTRL_REG][CTRL_OPC_MODE];
 assign host_req.data.req_1.rdma         = slv_reg[CTRL_REG][CTRL_OPC_RDMA];
 assign host_req.data.req_1.remote       = slv_reg[CTRL_REG][CTRL_OPC_REMOTE];
@@ -1195,9 +1195,14 @@ assign host_req.data.req_1.vaddr        = slv_reg[VADDR_RD_REG][VADDR_BITS-1:0];
 assign host_req.data.req_1.len          = slv_reg[CTRL_REG][CTRL_LEN_OFFS+:LEN_BITS];
 assign host_req.data.req_1.offs         = 0;
 assign host_req.data.req_1.rsrvd        = 0;
+// NVMe requests use the dedicated vFPGA NVMe interface.
+assign host_req.data.req_1.naddr        = 0;
+assign host_req.data.req_1.dev_id       = 0;
+assign host_req.data.req_1.nsid         = 0;
+assign host_req.data.req_1.writeRead    = 0;
 
 assign host_req.data.req_2.opcode       = slv_reg[CTRL_REG_2][CTRL_OPCODE_OFFS+:OPCODE_BITS];
-assign host_req.data.req_2.strm         = slv_reg[CTRL_REG_2][CTRL_STRM_OFFS+:STRM_BITS];
+assign host_req.data.req_2.strm         = STRM_BITS'(slv_reg[CTRL_REG_2][CTRL_STRM_OFFS+:CTRL_STRM_BITS]);
 assign host_req.data.req_2.mode         = slv_reg[CTRL_REG_2][CTRL_OPC_MODE];
 assign host_req.data.req_2.rdma         = slv_reg[CTRL_REG_2][CTRL_OPC_RDMA];
 assign host_req.data.req_2.remote       = slv_reg[CTRL_REG_2][CTRL_OPC_REMOTE];
@@ -1211,11 +1216,16 @@ assign host_req.data.req_2.vaddr        = slv_reg[VADDR_WR_REG][VADDR_BITS-1:0];
 assign host_req.data.req_2.len          = slv_reg[CTRL_REG_2][CTRL_LEN_OFFS+:LEN_BITS];
 assign host_req.data.req_2.offs         = 0;
 assign host_req.data.req_2.rsrvd        = 0;
+// NVMe requests use the dedicated vFPGA NVMe interface.
+assign host_req.data.req_2.naddr        = 0;
+assign host_req.data.req_2.dev_id       = 0;
+assign host_req.data.req_2.nsid         = 0;
+assign host_req.data.req_2.writeRead    = 0;
 
 assign host_req.valid = local_post || remote_post;
 
 // Command queues
-axis_data_fifo_req_256_used inst_cmd_queue (
+axis_data_fifo_req_384_used inst_cmd_queue (
   .s_axis_aresetn(aresetn),
   .s_axis_aclk(aclk),
   .s_axis_tvalid(host_req.valid),

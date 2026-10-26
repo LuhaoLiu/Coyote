@@ -32,17 +32,18 @@ import lynxTypes::*;
 /**
  * @brief   NVMe doorbell DMA arbiter
  *
- * Merges the SQ and CQ doorbell DMA streams onto a single DMA write channel.
+ * Merges host writes or SQ/CQ doorbells onto a single DMA write channel.
+ * Each input descriptor requests a DMA completion (req.last = 1).
  */
 module nvme_doorbell_arb (
     input  logic        aclk,
     input  logic        aresetn,
     
-    // Port 0: Host DMA (higher priority in tie)
+    // Port 0: Host DMA or SQ doorbells
     dmaIntf.s           s_dma_req_0,
     AXI4S.s             s_axis_0,
     
-    // Port 1: NVMe Doorbell DMA
+    // Port 1: NVMe doorbells or CQ doorbells
     dmaIntf.s           s_dma_req_1,
     AXI4S.s             s_axis_1,
     
@@ -65,6 +66,38 @@ module nvme_doorbell_arb (
     
     // Last grant for round-robin (0 = port 0 was last, 1 = port 1 was last)
     logic last_grant_C, last_grant_N;
+
+    logic [BLEN_BITS-1:0] beats_left_C;
+    logic completion_ready, completion_valid, completion_owner;
+
+    // XDMA status can arrive after the data grant has moved to another source.
+    // Preserve descriptor ownership until its ordered completion returns.
+    queue_stream #(
+        .QTYPE(logic),
+        .QDEPTH(N_OUTSTANDING_REGION)
+    ) inst_completion_owners (
+        .aclk(aclk),
+        .aresetn(aresetn),
+        .val_snk(m_dma_req.valid && m_dma_req.ready),
+        .rdy_snk(completion_ready),
+        .data_snk(state_C == ST_GRANT_1_REQ),
+        .val_src(completion_valid),
+        .rdy_src(m_dma_req.rsp.done),
+        .data_src(completion_owner)
+    );
+
+    assign s_dma_req_0.rsp.done = m_dma_req.rsp.done && completion_valid && !completion_owner;
+    assign s_dma_req_1.rsp.done = m_dma_req.rsp.done && completion_valid && completion_owner;
+
+    // A DMA fragment may end before the logical stream asserts TLAST.
+    always_ff @(posedge aclk) begin
+        if (!aresetn)
+            beats_left_C <= '0;
+        else if (m_dma_req.valid && m_dma_req.ready)
+            beats_left_C <= BLEN_BITS'((m_dma_req.req.len - 1'b1) >> BEAT_LOG_BITS);
+        else if (m_axis.tvalid && m_axis.tready)
+            beats_left_C <= beats_left_C - 1'b1;
+    end
 
     // State machine transitions
     
@@ -117,14 +150,14 @@ module nvme_doorbell_arb (
             end
             
             ST_GRANT_0_DATA: begin
-                if (m_axis.tvalid && m_axis.tready && m_axis.tlast) begin
+                if (m_axis.tvalid && m_axis.tready && (beats_left_C == 0)) begin
                     last_grant_N = 1'b0;
                     state_N = ST_IDLE;
                 end
             end
             
             ST_GRANT_1_DATA: begin
-                if (m_axis.tvalid && m_axis.tready && m_axis.tlast) begin
+                if (m_axis.tvalid && m_axis.tready && (beats_left_C == 0)) begin
                     last_grant_N = 1'b1;
                     state_N = ST_IDLE;
                 end
@@ -137,45 +170,26 @@ module nvme_doorbell_arb (
     end
     
     // Output muxing - DMA Request
+
+    assign s_dma_req_0.ready = (state_C == ST_GRANT_0_REQ) && completion_ready && m_dma_req.ready;
+    assign s_dma_req_1.ready = (state_C == ST_GRANT_1_REQ) && completion_ready && m_dma_req.ready;
+    assign s_axis_0.tready = (state_C == ST_GRANT_0_DATA) && m_axis.tready;
+    assign s_axis_1.tready = (state_C == ST_GRANT_1_DATA) && m_axis.tready;
     
     always_comb begin
         // Default: tie-off
         m_dma_req.valid = 1'b0;
         m_dma_req.req = '0;
-        s_dma_req_0.ready = 1'b0;
-        s_dma_req_1.ready = 1'b0;
         
         case (state_C)
             ST_GRANT_0_REQ: begin
-                m_dma_req.valid = s_dma_req_0.valid;
+                m_dma_req.valid = s_dma_req_0.valid && completion_ready;
                 m_dma_req.req = s_dma_req_0.req;
-                s_dma_req_0.ready = m_dma_req.ready;
             end
             
             ST_GRANT_1_REQ: begin
-                m_dma_req.valid = s_dma_req_1.valid;
+                m_dma_req.valid = s_dma_req_1.valid && completion_ready;
                 m_dma_req.req = s_dma_req_1.req;
-                s_dma_req_1.ready = m_dma_req.ready;
-            end
-            
-            default: begin
-                // Keep defaults
-            end
-        endcase
-    end
-    
-    // DMA response routing
-    always_comb begin
-        s_dma_req_0.rsp = '0;
-        s_dma_req_1.rsp = '0;
-        
-        case (state_C)
-            ST_GRANT_0_REQ, ST_GRANT_0_DATA: begin
-                s_dma_req_0.rsp = m_dma_req.rsp;
-            end
-            
-            ST_GRANT_1_REQ, ST_GRANT_1_DATA: begin
-                s_dma_req_1.rsp = m_dma_req.rsp;
             end
             
             default: begin
@@ -192,8 +206,6 @@ module nvme_doorbell_arb (
         m_axis.tdata = '0;
         m_axis.tkeep = '0;
         m_axis.tlast = 1'b0;
-        s_axis_0.tready = 1'b0;
-        s_axis_1.tready = 1'b0;
         
         case (state_C)
             ST_GRANT_0_DATA: begin
@@ -201,7 +213,6 @@ module nvme_doorbell_arb (
                 m_axis.tdata = s_axis_0.tdata;
                 m_axis.tkeep = s_axis_0.tkeep;
                 m_axis.tlast = s_axis_0.tlast;
-                s_axis_0.tready = m_axis.tready;
             end
             
             ST_GRANT_1_DATA: begin
@@ -209,7 +220,6 @@ module nvme_doorbell_arb (
                 m_axis.tdata = s_axis_1.tdata;
                 m_axis.tkeep = s_axis_1.tkeep;
                 m_axis.tlast = s_axis_1.tlast;
-                s_axis_1.tready = m_axis.tready;
             end
             
             default: begin
@@ -230,11 +240,11 @@ module nvme_doorbell_arb (
             port1_grant_count <= '0;
         end else begin
             // Port 0 grant complete
-            if (state_C == ST_GRANT_0_DATA && m_axis.tvalid && m_axis.tready && m_axis.tlast)
+            if (state_C == ST_GRANT_0_DATA && m_axis.tvalid && m_axis.tready && (beats_left_C == 0))
                 port0_grant_count <= port0_grant_count + 1;
             
             // Port 1 grant complete
-            if (state_C == ST_GRANT_1_DATA && m_axis.tvalid && m_axis.tready && m_axis.tlast)
+            if (state_C == ST_GRANT_1_DATA && m_axis.tvalid && m_axis.tready && (beats_left_C == 0))
                 port1_grant_count <= port1_grant_count + 1;
         end
     end

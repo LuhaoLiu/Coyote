@@ -117,8 +117,8 @@ For example, one could have a set-up where two vFPGAs are used for e.g., encrypt
 
 <span class="nb">validation_checks_hw</span><span class="p">()</span>
 <span class="nb">load_apps</span><span class="w"> </span><span class="p">(</span>
-<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">&quot;apps/encryption&quot;</span>
-<span class="w">    </span><span class="s">VFPGA_C0_1</span><span class="w"> </span><span class="s2">&quot;apps/compression&quot;</span>
+<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">"apps/encryption"</span>
+<span class="w">    </span><span class="s">VFPGA_C0_1</span><span class="w"> </span><span class="s2">"apps/compression"</span>
 <span class="p">)</span>
 
 <span class="nb">create_hw</span><span class="p">()</span>
@@ -152,18 +152,18 @@ For more details on the nuances of shell reconfiguration, see <em>Example 5: She
 <span class="nb">set</span><span class="p">(</span><span class="s">N_CONFIG</span><span class="w"> </span><span class="s">2</span><span class="p">)</span>
 
 <span class="c"># Manual floorplanning for PR</span>
-<span class="nb">set</span><span class="p">(</span><span class="s">FPLAN_PATH</span><span class="w"> </span><span class="s2">&quot;${CMAKE_SOURCE_DIR}/floorplans/streaming_fplan_u55c.xdc&quot;</span><span class="p">)</span>
+<span class="nb">set</span><span class="p">(</span><span class="s">FPLAN_PATH</span><span class="w"> </span><span class="s2">"${CMAKE_SOURCE_DIR}/floorplans/streaming_fplan_u55c.xdc"</span><span class="p">)</span>
 
 <span class="nb">validation_checks_hw</span><span class="p">()</span>
 
 <span class="nb">load_apps</span><span class="w"> </span><span class="p">(</span>
 <span class="w">    </span><span class="c"># First configuration, of 2 vFPGAs</span>
-<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">&quot;apps/encryption&quot;</span>
-<span class="w">    </span><span class="s">VFPGA_C0_1</span><span class="w"> </span><span class="s2">&quot;apps/vector_add&quot;</span>
+<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">"apps/encryption"</span>
+<span class="w">    </span><span class="s">VFPGA_C0_1</span><span class="w"> </span><span class="s2">"apps/vector_add"</span>
 
 <span class="w">    </span><span class="c"># Second configuration, of 2 vFPGAs</span>
-<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">&quot;apps/compression&quot;</span>
-<span class="w">    </span><span class="s">VFPGA_C0_1</span><span class="w"> </span><span class="s2">&quot;apps/vector_multiply&quot;</span>
+<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">"apps/compression"</span>
+<span class="w">    </span><span class="s">VFPGA_C0_1</span><span class="w"> </span><span class="s2">"apps/vector_multiply"</span>
 <span class="p">)</span>
 
 <span class="nb">create_hw</span><span class="p">()</span>
@@ -187,7 +187,7 @@ Therefore, when using Coyote with PR, you should ensure your floorplan can accom
 <span class="nb">validation_checks_hw</span><span class="p">()</span>
 
 <span class="nb">load_apps</span><span class="w"> </span><span class="p">(</span>
-<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">&quot;apps/encryption&quot;</span>
+<span class="w">    </span><span class="s">VFPGA_C0_0</span><span class="w"> </span><span class="s2">"apps/encryption"</span>
 <span class="p">)</span>
 
 <span class="nb">create_hw</span><span class="p">()</span>
@@ -218,14 +218,14 @@ Therefore, when using Coyote with PR, you should ensure your floorplan can accom
 <li><p>For the basic Coyote functionality, a Linux kernel with version &gt;= 5 is sufficient. We have extensively tested Coyote with Linux 5.4, Linux 5.15, Linux 6.2 and Linux 6.8.</p></li>
 <li><p>For GPU peer-to-peer (P2P), a Linux version &gt;= 6.2 is required.</p></li>
 <li><p>Hugepages enabled.</p></li>
-<li><p>For compiling the Coyote software stack, CMake &gt;= 3.5 with support for C++17 is required.</p></li>
+<li><p>For compiling the Coyote software stack, CMake &gt;= 3.16 with support for C++17 is required.</p></li>
 </ul>
 </div></blockquote>
 </li>
 <li><p>FPGAs &amp; Vivado:</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>Coyote currently supports the AMD Alveo U55C, V80, U280 and U250.</p></li>
+<li><p>Coyote currently supports the AMD Alveo U55C, V80, U280, U250 and U200.</p></li>
 <li><p>Coyote has to be built with Vivado design suite, including Vitis HLS. Coyote supports Vivado/Vitis HLS &gt;= 2022.1. Note, on the V80, we recommend using Vivado 2024.2 or newer.</p></li>
 <li><p>All network-related Coyote configurations are built using the UltraScale+ Integrated 100G Ethernet Subsystem, for which a valid license must be obtained.</p></li>
 </ul>
@@ -234,7 +234,7 @@ Therefore, when using Coyote with PR, you should ensure your floorplan can accom
 <li><p>GPUs: When targeting GPU-FPGA P2P DMA (Example 6), Coyote supports AMD Instinct GPUs via ROCm &gt;= 6.0 and NVIDIA GPUs via CUDA &gt;= 12.2 with the open-source driver (required for DMA-Buf export support). Both require Linux &gt;= 6.2.</p></li>
 </ul>
 <p><strong>Does Coyote work on the AMD Alveo V80?</strong></p>
-<p>Yes! In additon to supporting AMD UltraScale+ platforms (U55C, U280, U250), Coyote also supports AMD’s latest Alveo V80 card, which is based on the AMD Versal architecture.
+<p>Yes! In additon to supporting AMD UltraScale+ platforms (U55C, U280, U250, U200), Coyote also supports AMD’s latest Alveo V80 card, which is based on the AMD Versal architecture.
 Nearly all of Coyote’s features, including streaming host-device data movement, HBM, memory virtualization, interrupts, multi-tenancy and reconfiguration are supported on the V80.
 Networking support, with RDMA and TCP/IP, will be added in the near future.</p>
 <p>On the V80, Coyote supports both PCIe Gen 5x8 and PCIe Gen4x16, leading to 20 - 23 GBps host - FPGA throughput. Regarding HBM performance, Coyote implements a new partitioned HBM implementation on the V80, leading to 300+ GBps throughput with memory virtualization (though more can be achieved by tuning clock frequency etc.)</p>
@@ -300,7 +300,7 @@ But, if we tried to program the FPGA with the bitstream from <em>Example 1: Stat
 <p>If you tried reconfiguring and your system is stuck, a full system reboot is often required. At the very least, terminating the program, re-programming the FPGA and re-inserting the driver are a must.</p>
 <p><strong>Help, socket can’t bind during RDMA set-up</strong>
 If you get the following error:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>terminate<span class="w"> </span>called<span class="w"> </span>after<span class="w"> </span>throwing<span class="w"> </span>an<span class="w"> </span>instance<span class="w"> </span>of<span class="w"> </span><span class="s1">&#39;std::runtime_error&#39;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>terminate<span class="w"> </span>called<span class="w"> </span>after<span class="w"> </span>throwing<span class="w"> </span>an<span class="w"> </span>instance<span class="w"> </span>of<span class="w"> </span><span class="s1">'std::runtime_error'</span>
 <span class="w">    </span>what<span class="o">()</span>:<span class="w">  </span>ERROR:<span class="w"> </span>Could<span class="w"> </span>not<span class="w"> </span><span class="nb">bind</span><span class="w"> </span>a<span class="w"> </span>socket
 Aborted
 </pre></div>

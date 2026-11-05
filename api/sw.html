@@ -237,7 +237,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread14writeQpContextE8uint32_t"><code class="docutils literal notranslate"><span class="pre">writeQpContext()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7cThreadE7int32_t5pid_t8uint32_tNSt8functionIFviEEE"><code class="docutils literal notranslate"><span class="pre">cThread()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThreadD0Ev"><code class="docutils literal notranslate"><span class="pre">~cThread()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t"><code class="docutils literal notranslate"><span class="pre">userMap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7userMapEPv8uint64_t7int32_t"><code class="docutils literal notranslate"><span class="pre">userMap()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread9userUnmapEPv"><code class="docutils literal notranslate"><span class="pre">userUnmap()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread6getMemERR11CoyoteAlloc"><code class="docutils literal notranslate"><span class="pre">getMem()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7freeMemEPv"><code class="docutils literal notranslate"><span class="pre">freeMem()</span></code></a></li>
@@ -251,7 +251,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread14checkCompletedE10CoyoteOper"><code class="docutils literal notranslate"><span class="pre">checkCompleted()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread14clearCompletedEv"><code class="docutils literal notranslate"><span class="pre">clearCompleted()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8connSyncEb"><code class="docutils literal notranslate"><span class="pre">connSync()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8initRDMAE8uint32_t8uint16_tPKc"><code class="docutils literal notranslate"><span class="pre">initRDMA()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8initRDMAE8uint64_t8uint16_tPKcPv"><code class="docutils literal notranslate"><span class="pre">initRDMA()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread9closeConnEv"><code class="docutils literal notranslate"><span class="pre">closeConn()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread4lockEv"><code class="docutils literal notranslate"><span class="pre">lock()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread6unlockEv"><code class="docutils literal notranslate"><span class="pre">unlock()</span></code></a></li>
@@ -262,6 +262,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4NK6coyote7cThread10printDebugEv"><code class="docutils literal notranslate"><span class="pre">printDebug()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8mmapFpgaEv"><code class="docutils literal notranslate"><span class="pre">mmapFpga()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread10munmapFpgaEv"><code class="docutils literal notranslate"><span class="pre">munmapFpga()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread11releaseConnEv"><code class="docutils literal notranslate"><span class="pre">releaseConn()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7postCmdE8uint64_t8uint64_t8uint64_t8uint64_t"><code class="docutils literal notranslate"><span class="pre">postCmd()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7sendAckE8uint32_t"><code class="docutils literal notranslate"><span class="pre">sendAck()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread7readAckEv"><code class="docutils literal notranslate"><span class="pre">readAck()</span></code></a></li>
@@ -275,6 +276,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread3efdE"><code class="docutils literal notranslate"><span class="pre">efd</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread13terminate_efdE"><code class="docutils literal notranslate"><span class="pre">terminate_efd</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread12event_threadE"><code class="docutils literal notranslate"><span class="pre">event_thread</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread12cnfg_reg_avxE"><code class="docutils literal notranslate"><span class="pre">cnfg_reg_avx</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8cnfg_regE"><code class="docutils literal notranslate"><span class="pre">cnfg_reg</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread8ctrl_regE"><code class="docutils literal notranslate"><span class="pre">ctrl_reg</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread5wbackE"><code class="docutils literal notranslate"><span class="pre">wback</span></code></a></li>
@@ -285,6 +287,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread12is_connectedE"><code class="docutils literal notranslate"><span class="pre">is_connected</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread5vlockE"><code class="docutils literal notranslate"><span class="pre">vlock</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread13lock_acquiredE"><code class="docutils literal notranslate"><span class="pre">lock_acquired</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread16releaseResourcesEv"><code class="docutils literal notranslate"><span class="pre">releaseResources()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#_CPPv4N6coyote7cThread16additional_stateE"><code class="docutils literal notranslate"><span class="pre">additional_state</span></code></a></li>
 </ul>
 </li>
@@ -619,7 +622,9 @@
 <dt class="sig sig-object cpp" id="_CPPv4I0DpEN6coyote5cConn5iTaskE7int32_t7int32_tDp4args">
 <span id="_CPPv3I0DpEN6coyote5cConn5iTaskE7int32_tDp4args"></span><span id="_CPPv2I0DpEN6coyote5cConn5iTaskE7int32_tDp4args"></span><span class="k"><span class="pre">template</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">typename</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ret</span></span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="k"><span class="pre">typename</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="sig-name descname"><span class="n"><span class="pre">args</span></span></span><span class="p"><span class="pre">&gt;</span></span><br /><span class="target" id="classcoyote_1_1cConn_1abb9041c27b0b184d4540e2eefb484256"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">iTask</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">fid</span></span>, <a class="reference internal" href="#_CPPv4I0DpEN6coyote5cConn5iTaskE7int32_t7int32_tDp4args" title="coyote::cConn::iTask::args"><span class="n"><span class="pre">args</span></span></a><span class="p"><span class="pre">...</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">msg</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4I0DpEN6coyote5cConn5iTaskE7int32_t7int32_tDp4args" title="Link to this definition"></a><br /></dt>
 <dd><p>Submits a task to the Coyote service; non-blocking - exits immediately after sending the request. </p>
-<p>Users should use <a class="reference internal" href="#classcoyote_1_1cConn_1a7dddb76e77623e2e86e7b4177acaab3a"><span class="std std-ref">isTaskCompleted(int32_t tid)</span></a> to query the status of the task and if complete, getTaskRetVal(int32_t tid) to retrieve the return value. </p>
+<p>Users should use <a class="reference internal" href="#classcoyote_1_1cConn_1a7dddb76e77623e2e86e7b4177acaab3a"><span class="std std-ref">isTaskCompleted(int32_t tid)</span></a> to query the status of the task and if complete, getTaskRetVal(int32_t tid) to retrieve the return value. 
+
+</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Implemnted in the header file, since it is a template function. </p>
@@ -878,7 +883,7 @@
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote11CoyoteAlloc4sizeE">
-<span id="_CPPv3N6coyote11CoyoteAlloc4sizeE"></span><span id="_CPPv2N6coyote11CoyoteAlloc4sizeE"></span><span id="coyote::CoyoteAlloc::size__uint32_t"></span><span class="target" id="structcoyote_1_1CoyoteAlloc_1a94489369798811edb26645eab8ce77d1"></span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">size</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote11CoyoteAlloc4sizeE" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote11CoyoteAlloc4sizeE"></span><span id="_CPPv2N6coyote11CoyoteAlloc4sizeE"></span><span id="coyote::CoyoteAlloc::size__uint64_t"></span><span class="target" id="structcoyote_1_1CoyoteAlloc_1a62c99e70e5ef126c3fe004bb912ee78a"></span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">size</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote11CoyoteAlloc4sizeE" title="Link to this definition"></a><br /></dt>
 <dd><p>Size of the allocated memory. </p>
 </dd></dl>
 
@@ -1790,8 +1795,8 @@ TODO:<ul class="simple">
 </dd></dl>
 
 <dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t">
-<span id="_CPPv3N6coyote7cThread7userMapEPv8uint32_t7int32_t"></span><span id="_CPPv2N6coyote7cThread7userMapEPv8uint32_t7int32_t"></span><span id="coyote::cThread::userMap__voidP.uint32_t.int32_t"></span><span class="target" id="classcoyote_1_1cThread_1ae98d1c2c6e971dc930cff2e127093354"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">userMap</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">vaddr</span></span>, <span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">len</span></span>, <span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">mem_block</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="o"><span class="pre">-</span></span><span class="m"><span class="pre">1</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t" title="Link to this definition"></a><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread7userMapEPv8uint64_t7int32_t">
+<span id="_CPPv3N6coyote7cThread7userMapEPv8uint64_t7int32_t"></span><span id="_CPPv2N6coyote7cThread7userMapEPv8uint64_t7int32_t"></span><span id="coyote::cThread::userMap__voidP.uint64_t.int32_t"></span><span class="target" id="classcoyote_1_1cThread_1af72822405dadbc07c8114726615fa369"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">userMap</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">vaddr</span></span>, <span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">len</span></span>, <span class="n"><span class="pre">int32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">mem_block</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="o"><span class="pre">-</span></span><span class="m"><span class="pre">1</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread7userMapEPv8uint64_t7int32_t" title="Link to this definition"></a><br /></dt>
 <dd><p>Maps a buffer to the vFPGA’s TLB. Automatically detects GPU memory (when compiled with EN_ROCM or EN_CUDA) using HIP/CUDA pointer query APIs. GPU memory is registered via IOCTL_MAP_DMABUF (the dmabuf is exported internally); all other memory uses IOCTL_MAP_USER_MEM. The dmabuf fd is stored internally and released by userUnmap. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2007,8 +2012,8 @@ TODO:<ul class="simple">
 </dd></dl>
 
 <dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread8initRDMAE8uint32_t8uint16_tPKc">
-<span id="_CPPv3N6coyote7cThread8initRDMAE8uint32_t8uint16_tPKc"></span><span id="_CPPv2N6coyote7cThread8initRDMAE8uint32_t8uint16_tPKc"></span><span id="coyote::cThread::initRDMA__uint32_t.uint16_t.cCP"></span><span class="target" id="classcoyote_1_1cThread_1aec63f611a1e201699123dbe67606d6ff"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">initRDMA</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">buffer_size</span></span>, <span class="n"><span class="pre">uint16_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">port</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">server_address</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread8initRDMAE8uint32_t8uint16_tPKc" title="Link to this definition"></a><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread8initRDMAE8uint64_t8uint16_tPKcPv">
+<span id="_CPPv3N6coyote7cThread8initRDMAE8uint64_t8uint16_tPKcPv"></span><span id="_CPPv2N6coyote7cThread8initRDMAE8uint64_t8uint16_tPKcPv"></span><span id="coyote::cThread::initRDMA__uint64_t.uint16_t.cCP.voidP"></span><span class="target" id="classcoyote_1_1cThread_1a09b9ff9401e01dc7f407f0de8d0c0c6b"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">initRDMA</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">buffer_size</span></span>, <span class="n"><span class="pre">uint16_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">port</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="kt"><span class="pre">char</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">server_address</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span>, <span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">mem</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread8initRDMAE8uint64_t8uint16_tPKcPv" title="Link to this definition"></a><br /></dt>
 <dd><p>Sets up the <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a> for RDMA operations. </p>
 <p>This function creates an out-of-band connection to the server, which is used to exchange the queue pair (QP) between the nodes. Additionally, it allocates a buffer for the RDMA operations and returns a pointer to the allocated buffer.</p>
 <dl class="field-list simple">
@@ -2017,6 +2022,7 @@ TODO:<ul class="simple">
 <li><p><strong>buffer_size</strong> – Size of the buffer to be allocated for RDMA operations </p></li>
 <li><p><strong>port</strong> – Port number to be used for the out-of-band connection </p></li>
 <li><p><strong>server_address</strong> – Optional server address to connect to; if not provided, this <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a> acts as the server </p></li>
+<li><p><strong>mem</strong> – Optional pre-allocated staging buffer for RDMA operations; if provided (not nullptr), it is used directly and no buffer is allocated internally via getMem </p></li>
 </ul>
 </dd>
 </dl>
@@ -2082,8 +2088,14 @@ TODO:<ul class="simple">
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread10munmapFpgaEv">
-<span id="_CPPv3N6coyote7cThread10munmapFpgaEv"></span><span id="_CPPv2N6coyote7cThread10munmapFpgaEv"></span><span id="coyote::cThread::munmapFpga"></span><span class="target" id="classcoyote_1_1cThread_1a5b7118032b357a730c49b1e7f6e78930"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">munmapFpga</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread10munmapFpgaEv" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote7cThread10munmapFpgaEv"></span><span id="_CPPv2N6coyote7cThread10munmapFpgaEv"></span><span id="coyote::cThread::munmapFpga"></span><span class="target" id="classcoyote_1_1cThread_1a5fe42a215f8c3fe71b7646738b7663d4"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">munmapFpga</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread10munmapFpgaEv" title="Link to this definition"></a><br /></dt>
 <dd><p>Utility function, unmapping all the vFPGA control registers and writeback regions. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread11releaseConnEv">
+<span id="_CPPv3N6coyote7cThread11releaseConnEv"></span><span id="_CPPv2N6coyote7cThread11releaseConnEv"></span><span id="coyote::cThread::releaseConn"></span><span class="target" id="classcoyote_1_1cThread_1aeb5dd6afaa7e2c1a3993748061f42145"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">releaseConn</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote7cThread11releaseConnEv" title="Link to this definition"></a><br /></dt>
+<dd><p>Utility function, closing the out-of-band connection and socket (if open) and marking the <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a> as disconnected. </p>
 </dd></dl>
 
 <dl class="cpp function">
@@ -2197,10 +2209,15 @@ TODO:<ul class="simple">
 </dd></dl>
 
 <dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread12cnfg_reg_avxE">
+<span id="_CPPv3N6coyote7cThread12cnfg_reg_avxE"></span><span id="_CPPv2N6coyote7cThread12cnfg_reg_avxE"></span><span id="coyote::cThread::cnfg_reg_avx__voidVP"></span><span class="target" id="classcoyote_1_1cThread_1a32b14d6937e5d02d7c7c0cf9c803408b"></span><span class="k"><span class="pre">volatile</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">cnfg_reg_avx</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread12cnfg_reg_avxE" title="Link to this definition"></a><br /></dt>
+<dd><p>vFPGA config registers, if AVX is enabled, as implemented in cnfg_slave_avx.sv; used mainly for starting DMA commands </p>
+</dd></dl>
+
+<dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread8cnfg_regE">
 <span id="_CPPv3N6coyote7cThread8cnfg_regE"></span><span id="_CPPv2N6coyote7cThread8cnfg_regE"></span><span id="coyote::cThread::cnfg_reg__uint64_tVP"></span><span class="target" id="classcoyote_1_1cThread_1a4f7958f0f4047e47f4291402d0aa6924"></span><span class="k"><span class="pre">volatile</span></span><span class="w"> </span><span class="n"><span class="pre">uint64_t</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">cnfg_reg</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="m"><span class="pre">0</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread8cnfg_regE" title="Link to this definition"></a><br /></dt>
-<dd><p>vFPGA config registers, if AVX is enabled, as implemented in cnfg_slave_avx.sv; used mainly for starting DMA commands </p>
-<p>vFPGA config registers, if AVX is disabled, as implemented in cnfg_slave.sv; used mainly for starting DMA commands </p>
+<dd><p>vFPGA config registers, if AVX is disabled, as implemented in cnfg_slave.sv; used mainly for starting DMA commands </p>
 </dd></dl>
 
 <dl class="cpp var">
@@ -2241,7 +2258,7 @@ TODO:<ul class="simple">
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread12is_connectedE">
-<span id="_CPPv3N6coyote7cThread12is_connectedE"></span><span id="_CPPv2N6coyote7cThread12is_connectedE"></span><span id="coyote::cThread::is_connected__b"></span><span class="target" id="classcoyote_1_1cThread_1af245c516d27fe2f19b9f0d5705285bbf"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">is_connected</span></span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread12is_connectedE" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote7cThread12is_connectedE"></span><span id="_CPPv2N6coyote7cThread12is_connectedE"></span><span id="coyote::cThread::is_connected__b"></span><span class="target" id="classcoyote_1_1cThread_1af245c516d27fe2f19b9f0d5705285bbf"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">is_connected</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="k"><span class="pre">false</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread12is_connectedE" title="Link to this definition"></a><br /></dt>
 <dd><p>Set to true if there is an active out-of-band connection to a remote node for this <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a>. </p>
 </dd></dl>
 
@@ -2255,6 +2272,15 @@ TODO:<ul class="simple">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread13lock_acquiredE">
 <span id="_CPPv3N6coyote7cThread13lock_acquiredE"></span><span id="_CPPv2N6coyote7cThread13lock_acquiredE"></span><span id="coyote::cThread::lock_acquired__b"></span><span class="target" id="classcoyote_1_1cThread_1a4629374ac61319cbca1068328c15bdc9"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">lock_acquired</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="p"><span class="pre">{</span></span><span class="k"><span class="pre">false</span></span><span class="p"><span class="pre">}</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread13lock_acquiredE" title="Link to this definition"></a><br /></dt>
 <dd><p>Set to true if the vFPGA lock is acquired by this <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a>; used to release the lock in the destructor. </p>
+</dd></dl>
+
+</div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-functions">Private Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N6coyote7cThread16releaseResourcesEv">
+<span id="_CPPv3N6coyote7cThread16releaseResourcesEv"></span><span id="_CPPv2N6coyote7cThread16releaseResourcesEv"></span><span id="coyote::cThread::releaseResources"></span><span class="target" id="classcoyote_1_1cThread_1a4dd2fa93c5195aaa05cd30a1bfd9b97f"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">releaseResources</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><a class="headerlink" href="#_CPPv4N6coyote7cThread16releaseResourcesEv" title="Link to this definition"></a><br /></dt>
+<dd><p>Utility function to clean up <a class="reference internal" href="#classcoyote_1_1cThread"><span class="std std-ref">cThread</span></a> (construction and destruction) </p>
 </dd></dl>
 
 </div>
@@ -2521,47 +2547,47 @@ TODO:<ul class="simple">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote11isLocalReadE10CoyoteOper">
-<span id="_CPPv3N6coyote11isLocalReadE10CoyoteOper"></span><span id="_CPPv2N6coyote11isLocalReadE10CoyoteOper"></span><span id="coyote::isLocalRead__CoyoteOper"></span><span class="target" id="namespacecoyote_1ad307a1ad28327f1ddf11a9baf2b8d5ab"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isLocalRead</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote11isLocalReadE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote11isLocalReadE10CoyoteOper"></span><span id="_CPPv2N6coyote11isLocalReadE10CoyoteOper"></span><span id="coyote::isLocalRead__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1ad307a1ad28327f1ddf11a9baf2b8d5ab"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isLocalRead</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote11isLocalReadE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote12isLocalWriteE10CoyoteOper">
-<span id="_CPPv3N6coyote12isLocalWriteE10CoyoteOper"></span><span id="_CPPv2N6coyote12isLocalWriteE10CoyoteOper"></span><span id="coyote::isLocalWrite__CoyoteOper"></span><span class="target" id="namespacecoyote_1ac672a576668455c201604212015c0894"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isLocalWrite</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isLocalWriteE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote12isLocalWriteE10CoyoteOper"></span><span id="_CPPv2N6coyote12isLocalWriteE10CoyoteOper"></span><span id="coyote::isLocalWrite__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1ac672a576668455c201604212015c0894"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isLocalWrite</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isLocalWriteE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote11isLocalSyncE10CoyoteOper">
-<span id="_CPPv3N6coyote11isLocalSyncE10CoyoteOper"></span><span id="_CPPv2N6coyote11isLocalSyncE10CoyoteOper"></span><span id="coyote::isLocalSync__CoyoteOper"></span><span class="target" id="namespacecoyote_1af49520f2189ca67786850a6d0b6238b5"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isLocalSync</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote11isLocalSyncE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote11isLocalSyncE10CoyoteOper"></span><span id="_CPPv2N6coyote11isLocalSyncE10CoyoteOper"></span><span id="coyote::isLocalSync__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1af49520f2189ca67786850a6d0b6238b5"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isLocalSync</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote11isLocalSyncE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote12isRemoteRdmaE10CoyoteOper">
-<span id="_CPPv3N6coyote12isRemoteRdmaE10CoyoteOper"></span><span id="_CPPv2N6coyote12isRemoteRdmaE10CoyoteOper"></span><span id="coyote::isRemoteRdma__CoyoteOper"></span><span class="target" id="namespacecoyote_1ae0fdc1351e739125d59474337700ed94"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteRdma</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isRemoteRdmaE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote12isRemoteRdmaE10CoyoteOper"></span><span id="_CPPv2N6coyote12isRemoteRdmaE10CoyoteOper"></span><span id="coyote::isRemoteRdma__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1ae0fdc1351e739125d59474337700ed94"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteRdma</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isRemoteRdmaE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote12isRemoteReadE10CoyoteOper">
-<span id="_CPPv3N6coyote12isRemoteReadE10CoyoteOper"></span><span id="_CPPv2N6coyote12isRemoteReadE10CoyoteOper"></span><span id="coyote::isRemoteRead__CoyoteOper"></span><span class="target" id="namespacecoyote_1a77a8d3188aa4c70f3eec86af3c793bb1"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteRead</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isRemoteReadE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote12isRemoteReadE10CoyoteOper"></span><span id="_CPPv2N6coyote12isRemoteReadE10CoyoteOper"></span><span id="coyote::isRemoteRead__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1a77a8d3188aa4c70f3eec86af3c793bb1"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteRead</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isRemoteReadE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote13isRemoteWriteE10CoyoteOper">
-<span id="_CPPv3N6coyote13isRemoteWriteE10CoyoteOper"></span><span id="_CPPv2N6coyote13isRemoteWriteE10CoyoteOper"></span><span id="coyote::isRemoteWrite__CoyoteOper"></span><span class="target" id="namespacecoyote_1a567e42e083126cfccc11563f1363eabb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteWrite</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote13isRemoteWriteE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote13isRemoteWriteE10CoyoteOper"></span><span id="_CPPv2N6coyote13isRemoteWriteE10CoyoteOper"></span><span id="coyote::isRemoteWrite__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1a567e42e083126cfccc11563f1363eabb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteWrite</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote13isRemoteWriteE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote12isRemoteSendE10CoyoteOper">
-<span id="_CPPv3N6coyote12isRemoteSendE10CoyoteOper"></span><span id="_CPPv2N6coyote12isRemoteSendE10CoyoteOper"></span><span id="coyote::isRemoteSend__CoyoteOper"></span><span class="target" id="namespacecoyote_1aacac0d799c75ecbeeda3c756f6533c4d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteSend</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isRemoteSendE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote12isRemoteSendE10CoyoteOper"></span><span id="_CPPv2N6coyote12isRemoteSendE10CoyoteOper"></span><span id="coyote::isRemoteSend__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1aacac0d799c75ecbeeda3c756f6533c4d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteSend</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote12isRemoteSendE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote19isRemoteWriteOrSendE10CoyoteOper">
-<span id="_CPPv3N6coyote19isRemoteWriteOrSendE10CoyoteOper"></span><span id="_CPPv2N6coyote19isRemoteWriteOrSendE10CoyoteOper"></span><span id="coyote::isRemoteWriteOrSend__CoyoteOper"></span><span class="target" id="namespacecoyote_1ae114ea3f68fb7cd0b046801d72c159d2"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteWriteOrSend</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote19isRemoteWriteOrSendE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote19isRemoteWriteOrSendE10CoyoteOper"></span><span id="_CPPv2N6coyote19isRemoteWriteOrSendE10CoyoteOper"></span><span id="coyote::isRemoteWriteOrSend__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1ae114ea3f68fb7cd0b046801d72c159d2"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteWriteOrSend</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote19isRemoteWriteOrSendE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6coyote11isRemoteTcpE10CoyoteOper">
-<span id="_CPPv3N6coyote11isRemoteTcpE10CoyoteOper"></span><span id="_CPPv2N6coyote11isRemoteTcpE10CoyoteOper"></span><span id="coyote::isRemoteTcp__CoyoteOper"></span><span class="target" id="namespacecoyote_1a50c72a6b06139c042e16628cfa03826a"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteTcp</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote11isRemoteTcpE10CoyoteOper" title="Link to this definition"></a><br /></dt>
+<span id="_CPPv3N6coyote11isRemoteTcpE10CoyoteOper"></span><span id="_CPPv2N6coyote11isRemoteTcpE10CoyoteOper"></span><span id="coyote::isRemoteTcp__CoyoteOperCE"></span><span class="target" id="namespacecoyote_1a50c72a6b06139c042e16628cfa03826a"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">constexpr</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isRemoteTcp</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6coyote10CoyoteOperE" title="coyote::CoyoteOper"><span class="n"><span class="pre">CoyoteOper</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">oper</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6coyote11isRemoteTcpE10CoyoteOper" title="Link to this definition"></a><br /></dt>
 <dd></dd></dl>
 
 </div>
@@ -2734,37 +2760,11 @@ TODO:<ul class="simple">
 <dd><div class="docutils container">
 <em>#include &lt;thread&gt;</em></div>
 <div class="docutils container">
-<em>#include &lt;chrono&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;string&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;random&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;fstream&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;iostream&gt;</em></div>
-<div class="docutils container">
 <em>#include &lt;functional&gt;</em></div>
 <div class="docutils container">
 <em>#include &lt;unordered_map&gt;</em></div>
 <div class="docutils container">
-<em>#include &lt;fcntl.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;netdb.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;syslog.h&gt;</em></div>
-<div class="docutils container">
 <em>#include &lt;unistd.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;sys/mman.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;sys/ioctl.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;sys/epoll.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;sys/eventfd.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;linux/mman.h&gt;</em></div>
 <div class="docutils container">
 <em>#include &lt;boost/interprocess/sync/named_mutex.hpp&gt;</em></div>
 <div class="docutils container">

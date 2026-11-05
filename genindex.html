@@ -400,12 +400,12 @@
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote8cService16daemonSigHandlerEi">coyote::cService::daemonSigHandler (C++ function)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/sw.html#_CPPv4N6coyote8cService6deviceE">coyote::cService::device (C++ member)</a>
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote8cService11getInstanceENSt6stringEb7int32_t8uint32_tb8uint16_t">coyote::cService::getInstance (C++ function)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/sw.html#_CPPv4N6coyote8cService10initDaemonEv">coyote::cService::initDaemon (C++ function)</a>
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote8cService10initSocketEv">coyote::cService::initSocket (C++ function)</a>
@@ -500,6 +500,8 @@
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread8cnfg_regE">coyote::cThread::cnfg_reg (C++ member)</a>
 </li>
+      <li><a href="api/sw.html#_CPPv4N6coyote7cThread12cnfg_reg_avxE">coyote::cThread::cnfg_reg_avx (C++ member)</a>
+</li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread6connfdE">coyote::cThread::connfd (C++ member)</a>
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread8connSyncEb">coyote::cThread::connSync (C++ function)</a>
@@ -538,7 +540,7 @@
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread4hpidE">coyote::cThread::hpid (C++ member)</a>
 </li>
-      <li><a href="api/sw.html#_CPPv4N6coyote7cThread8initRDMAE8uint32_t8uint16_tPKc">coyote::cThread::initRDMA (C++ function)</a>
+      <li><a href="api/sw.html#_CPPv4N6coyote7cThread8initRDMAE8uint64_t8uint16_tPKcPv">coyote::cThread::initRDMA (C++ function)</a>
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread6invokeE10CoyoteOper5tcpSgb">coyote::cThread::invoke (C++ function)</a>, <a href="api/sw.html#_CPPv4N6coyote7cThread6invokeE10CoyoteOper6rdmaSgb">[1]</a>, <a href="api/sw.html#_CPPv4N6coyote7cThread6invokeE10CoyoteOper6syncSg">[2]</a>, <a href="api/sw.html#_CPPv4N6coyote7cThread6invokeE10CoyoteOper7localSg7localSgb">[3]</a>, <a href="api/sw.html#_CPPv4N6coyote7cThread6invokeE10CoyoteOper7localSgb">[4]</a>
 </li>
@@ -562,6 +564,10 @@
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread7readAckEv">coyote::cThread::readAck (C++ function)</a>
 </li>
+      <li><a href="api/sw.html#_CPPv4N6coyote7cThread11releaseConnEv">coyote::cThread::releaseConn (C++ function)</a>
+</li>
+      <li><a href="api/sw.html#_CPPv4N6coyote7cThread16releaseResourcesEv">coyote::cThread::releaseResources (C++ function)</a>
+</li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread7sendAckE8uint32_t">coyote::cThread::sendAck (C++ function)</a>
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread6setCSRE8uint64_t8uint32_t">coyote::cThread::setCSR (C++ function)</a>
@@ -572,7 +578,7 @@
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread6unlockEv">coyote::cThread::unlock (C++ function)</a>
 </li>
-      <li><a href="api/sw.html#_CPPv4N6coyote7cThread7userMapEPv8uint32_t7int32_t">coyote::cThread::userMap (C++ function)</a>
+      <li><a href="api/sw.html#_CPPv4N6coyote7cThread7userMapEPv8uint64_t7int32_t">coyote::cThread::userMap (C++ function)</a>
 </li>
       <li><a href="api/sw.html#_CPPv4N6coyote7cThread9userUnmapEPv">coyote::cThread::userUnmap (C++ function)</a>
 </li>
@@ -834,15 +840,17 @@
 </li>
       <li><a href="api/driver.html#_CPPv417vfpga_dev_releaseP5inodeP4file">vfpga_dev_release (C++ function)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/driver.html#_CPPv49vfpga_isriPv">vfpga_isr (C++ function)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/driver.html#_CPPv420vfpga_notify_handlerP11work_struct">vfpga_notify_handler (C++ function)</a>
 </li>
       <li><a href="api/driver.html#_CPPv420vfpga_pfault_handlerP11work_struct">vfpga_pfault_handler (C++ function)</a>
 </li>
       <li><a href="api/driver.html#_CPPv422vfpga_register_eventfdP9vfpga_devii">vfpga_register_eventfd (C++ function)</a>
+</li>
+      <li><a href="api/driver.html#_CPPv426vfpga_release_notificationP9vfpga_devi">vfpga_release_notification (C++ function)</a>
 </li>
       <li><a href="api/driver.html#_CPPv424vfpga_unregister_eventfdP9vfpga_devi">vfpga_unregister_eventfd (C++ function)</a>
 </li>
